@@ -29,21 +29,34 @@ Everything platform-specific goes through `PlatformCrypto`, so the vendored core
 
 ## Status
 
-**Crypto foundation — done and verified.** `npm test` → **115 passing** (keys 28 · ratchet 34 · mnemonic 39 · safetyNumber 10 · seam 4). This proves the core ports to a non-browser runtime unchanged and the adapter seam works.
-
-Not yet built: the Expo app shell, the React Native adapter, and the UI.
+**Crypto foundation — done and verified.** `npm test` → **118 passing** (keys 28 · ratchet 34 · mnemonic 39 · safetyNumber 10 · seam 4 · onboarding 3). Proves the core ports to a non-browser runtime unchanged, the adapter seam works, and the on-device identity flow is wired to the real core.
 
 ```bash
-npm test        # runs the vendored vectors + seam under Node
+npm test        # runs the vendored vectors + seam + onboarding under Node
 ```
+
+**App shell — written, needs a device to validate.** Expo Router screens + the React Native adapter are in the repo but have NOT been run (React Native can't run headless in CI). The walking-skeleton screen (`app/index.tsx`) creates an identity and derives the master key on device via native crypto.
+
+- `app/` — Expo Router: `_layout.tsx` (loads polyfills first) + `index.tsx` (walking skeleton)
+- `src/platform/reactNative.ts` — the RN adapter (quick-crypto PBKDF2 + native CSPRNG)
+- `src/polyfills.ts`, `app.json`, `babel.config.js`
+
+### Run the app (on your machine)
+
+```bash
+npm install
+npx expo install --fix     # pins Expo-SDK-correct versions of the RN deps
+npx expo run:android       # a dev build (NOT Expo Go — quick-crypto is a native module)
+```
+
+> The RN dependency versions in `package.json` are a best-effort Expo SDK 52 set; `npx expo install --fix` reconciles them. `react-native-quick-crypto` has native setup — see its docs; confirm the import shape in `src/platform/reactNative.ts` matches the version you install.
 
 ## Next steps
 
-1. **Expo app shell** — `npx create-expo-app` (dev build, not Expo Go; we need custom native modules), Expo Router for file-based screens.
-2. **React Native adapter** — implement `PlatformCrypto` with `react-native-quick-crypto` + `react-native-get-random-values`; add storage (SQLite/MMKV) and secure key storage (`expo-secure-store`, Keystore-backed — this also raises the at-rest ceiling from the PIN-only bound).
-3. **Walking skeleton** — a screen that creates an identity from a BIP39 mnemonic and derives the master key on device, wiring the verified core to real native crypto.
-4. **UI** — port the screens (setup · unlock · chats · chat · settings) to React Native; reuse the stores, API and WebSocket clients (all portable).
-5. **Push** — native FCM via `expo-notifications`.
+1. **Validate the walking skeleton** on an emulator/device — confirm identity generation + PBKDF2 run on native crypto.
+2. **Storage adapter** — SQLite/MMKV for the vault + `expo-secure-store` (Keystore-backed) for the most sensitive keys (also raises the at-rest ceiling beyond the PIN bound).
+3. **Port the screens** (unlock · chats · chat · settings) — reuse the stores, API and WebSocket clients (all portable).
+4. **Push** — native FCM via `expo-notifications`.
 
 ## Licence
 
