@@ -16,8 +16,10 @@ import QuickCrypto from 'react-native-quick-crypto'
  */
 export const reactNativePlatform: PlatformCrypto = {
   async pbkdf2(password, salt, iterations, keyLenBytes) {
+    // pbkdf2Sync(password, salt, iterations, keylen, digest) -> Buffer (verified
+    // against react-native-quick-crypto 0.7.17's types). Copy into a plain Uint8Array.
     const derived = QuickCrypto.pbkdf2Sync(password, salt, iterations, keyLenBytes, 'sha256')
-    return new Uint8Array(derived as unknown as ArrayBufferLike)
+    return Uint8Array.from(derived)
   },
 
   randomBytes(length) {
