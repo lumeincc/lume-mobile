@@ -1,14 +1,31 @@
 {
   "expo": {
     "name": "LUME",
-    "slug": "lume-mobile",
+    "slug": "lume",
     "scheme": "lume",
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": false,
-    "plugins": ["expo-router", "expo-secure-store"],
-    "android": { "package": "app.lume.mobile" },
-    "ios": { "bundleIdentifier": "app.lume.mobile" }
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-asset"
+    ],
+    "android": {
+      "package": "app.lume.mobile"
+    },
+    "ios": {
+      "bundleIdentifier": "app.lume.mobile"
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "91a75c68-dccb-43fd-b477-3d225a70b528"
+      }
+    },
+    "owner": "lume-inc"
   }
 }
