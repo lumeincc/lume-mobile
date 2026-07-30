@@ -2,24 +2,24 @@
 // Copyright (C) 2026 LUME Inc
 
 import type { PlatformCrypto } from './adapter'
-// react-native-quick-crypto is a JSI-backed drop-in for Node's `crypto`, so the
-// 600k-iteration PBKDF2 runs natively instead of janking the JS thread. It is a
-// native module — only present inside the Expo app, not this test workspace.
-// NOTE: confirm the import shape against your installed quick-crypto version.
-import QuickCrypto from 'react-native-quick-crypto'
+import { pbkdf2 } from '@noble/hashes/pbkdf2.js'
+import { sha256 } from '@noble/hashes/sha2.js'
 
 /**
- * React Native implementation of the platform seam. Randomness comes from the OS
- * CSPRNG via react-native-get-random-values (installed in src/polyfills.ts,
- * before any crypto runs), which backs the global `crypto.getRandomValues` that
- * TweetNaCl and BIP39 use.
+ * React Native platform seam.
+ *
+ * PBKDF2 runs in PURE JS (@noble/hashes) — no native crypto module. This was a
+ * deliberate choice after react-native-quick-crypto (a JSI native module) proved
+ * fragile on the RN 0.76 old architecture and crashed the app at import time.
+ * 600k iterations is ~1–2s on a phone: fine for a one-time identity setup. If the
+ * unlock delay ever matters, swap in a native PBKDF2 behind this same seam.
+ *
+ * Randomness comes from the OS CSPRNG via react-native-get-random-values, which
+ * is imported for its side effect in src/polyfills.ts before any crypto runs.
  */
 export const reactNativePlatform: PlatformCrypto = {
   async pbkdf2(password, salt, iterations, keyLenBytes) {
-    // pbkdf2Sync(password, salt, iterations, keylen, digest) -> Buffer (verified
-    // against react-native-quick-crypto 0.7.17's types). Copy into a plain Uint8Array.
-    const derived = QuickCrypto.pbkdf2Sync(password, salt, iterations, keyLenBytes, 'sha256')
-    return Uint8Array.from(derived)
+    return pbkdf2(sha256, password, salt, { c: iterations, dkLen: keyLenBytes })
   },
 
   randomBytes(length) {
