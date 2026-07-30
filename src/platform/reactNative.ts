@@ -26,3 +26,8 @@ export const reactNativePlatform: PlatformCrypto = {
     return crypto.getRandomValues(new Uint8Array(length))
   },
 }
+
+// NOTE: this module must stay free of native-module imports. It is pure JS
+// (@noble/hashes + the global CSPRNG), which is what lets the parity test import
+// it under Node and prove the device KDF matches the web client's WebCrypto one.
+// The full device platform (SQLite + keystore) is composed in reactNativeFull.ts.

@@ -1,0 +1,208 @@
+// SPDX-License-Identifier: LicenseRef-LUME-Source-Available
+// Copyright (C) 2026 LUME Inc
+
+/**
+ * The encrypted vault — mobile counterpart of the web client's crypto/storage.ts.
+ *
+ * The record format is deliberately identical to the web's v2 records
+ * (`{ v: 2, ciphertext, nonce }`, NaCl secretbox under a 32-byte master key), so
+ * the two clients stay conceptually one design rather than two. What differs is
+ * only what the web cannot do:
+ *
+ *   - persistence goes through a KeyValueStore (SQLite on device) instead of IndexedDB;
+ *   - the master key is derived from the PIN **and** a high-entropy device secret
+ *     held by the OS keystore, which lifts the at-rest ceiling that a 4–6 digit
+ *     PIN imposes on the web store (SEC-20260721-020).
+ *
+ * Key material never leaves this module in plaintext form on disk, and the master
+ * key is returned to the caller rather than cached here — the caller owns its
+ * lifetime and is expected to zero it.
+ */
+
+import nacl from 'tweetnacl'
+import { encodeBase64, decodeBase64 } from 'tweetnacl-util'
+import type { IdentityKeys } from './crypto/keys'
+import type { Platform } from './platform/adapter'
+
+/** Storage keys. Names match the web client so the two schemas stay recognisable. */
+export const VAULT_KEYS = {
+  IDENTITY: 'identity_keys',
+  ENCRYPTION_SALT: 'encryption_salt',
+  PIN_TOKEN: 'pin_hash',
+} as const
+
+/** Keystore entry holding the device secret. Never written to app storage. */
+const DEVICE_SECRET_KEY = 'lume_device_secret'
+
+/** Matches the web client (OWASP 2023 for PBKDF2-SHA256). */
+export const PBKDF2_ITERATIONS = 600_000
+export const MASTER_KEY_BYTES = 32
+const SALT_BYTES = 16
+const DEVICE_SECRET_BYTES = 32
+
+/** Plaintext sentinel used to tell "wrong PIN" apart from "damaged record". */
+const PIN_SENTINEL = 'lume-pin-ok'
+
+/** The web client's v2 record shape. */
+export interface EncryptedRecord {
+  v: 2
+  ciphertext: string
+  nonce: string
+}
+
+export function encryptWithKey(data: string, masterKey: Uint8Array): EncryptedRecord {
+  const nonce = nacl.randomBytes(nacl.secretbox.nonceLength)
+  const ciphertext = nacl.secretbox(new TextEncoder().encode(data), nonce, masterKey)
+  return { v: 2, ciphertext: encodeBase64(ciphertext), nonce: encodeBase64(nonce) }
+}
+
+/**
+ * Fails closed on anything that is not an intact record sealed under this key.
+ * A damaged blob must return null rather than throw: NaCl rejects a short nonce
+ * or a bad base64 payload with an exception, and letting that escape would crash
+ * the caller instead of surfacing as "this vault is corrupt".
+ */
+export function decryptWithKey(record: EncryptedRecord, masterKey: Uint8Array): string | null {
+  if (record?.v !== 2 || typeof record.ciphertext !== 'string' || typeof record.nonce !== 'string') return null
+  try {
+    const nonce = decodeBase64(record.nonce)
+    const ciphertext = decodeBase64(record.ciphertext)
+    if (nonce.length !== nacl.secretbox.nonceLength) return null
+    if (ciphertext.length <= nacl.secretbox.overheadLength) return null
+    const opened = nacl.secretbox.open(ciphertext, nonce, masterKey)
+    return opened ? new TextDecoder().decode(opened) : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The device secret is created once per install and lives only in the OS keystore.
+ * Losing it (app uninstalled, keystore cleared) makes the local vault
+ * unrecoverable by design — the identity itself is still recoverable from the
+ * BIP39 mnemonic, which is what LUME's recovery model already relies on.
+ */
+async function getOrCreateDeviceSecret(platform: Platform): Promise<Uint8Array> {
+  const existing = await platform.secure.getSecret(DEVICE_SECRET_KEY)
+  if (existing) {
+    const decoded = decodeBase64(existing)
+    if (decoded.length === DEVICE_SECRET_BYTES) return decoded
+  }
+  const fresh = platform.crypto.randomBytes(DEVICE_SECRET_BYTES)
+  await platform.secure.setSecret(DEVICE_SECRET_KEY, encodeBase64(fresh))
+  return fresh
+}
+
+/**
+ * The salt is not secret, so it lives in normal storage next to the vault. It is
+ * created on first use and never rotated: rotating it would orphan every record
+ * sealed under the old master key.
+ */
+async function getOrCreateSalt(platform: Platform): Promise<Uint8Array> {
+  const existing = await platform.kv.get<string>(VAULT_KEYS.ENCRYPTION_SALT)
+  if (existing) {
+    const decoded = decodeBase64(existing)
+    if (decoded.length === SALT_BYTES) return decoded
+  }
+  const fresh = platform.crypto.randomBytes(SALT_BYTES)
+  await platform.kv.set(VAULT_KEYS.ENCRYPTION_SALT, encodeBase64(fresh))
+  return fresh
+}
+
+/**
+ * Derive the master key from the PIN and the keystore-held device secret.
+ *
+ * Mixing the device secret into the PBKDF2 password — rather than using it as the
+ * salt — keeps the 600k stretch applied to the whole input, so an attacker who
+ * has the stored blob but not the keystore has no low-entropy target to grind.
+ */
+export async function deriveMasterKey(platform: Platform, pin: string): Promise<Uint8Array> {
+  const salt = await getOrCreateSalt(platform)
+  const deviceSecret = await getOrCreateDeviceSecret(platform)
+  const pinBytes = new TextEncoder().encode(pin)
+
+  const password = new Uint8Array(pinBytes.length + deviceSecret.length)
+  password.set(pinBytes, 0)
+  password.set(deviceSecret, pinBytes.length)
+
+  try {
+    return await platform.crypto.pbkdf2(password, salt, PBKDF2_ITERATIONS, MASTER_KEY_BYTES)
+  } finally {
+    // Zero every copy of the low-entropy input and the device secret.
+    password.fill(0)
+    pinBytes.fill(0)
+    deviceSecret.fill(0)
+  }
+}
+
+/**
+ * Store a sentinel sealed under the master key. Being able to open it proves the
+ * PIN was right, which is what lets `unlock` report a wrong PIN without treating a
+ * damaged vault as one (the failure mode behind SEC-20260721-002 on the web).
+ */
+export async function savePinToken(platform: Platform, masterKey: Uint8Array): Promise<void> {
+  await platform.kv.set(VAULT_KEYS.PIN_TOKEN, encryptWithKey(PIN_SENTINEL, masterKey))
+}
+
+export async function verifyPinToken(platform: Platform, masterKey: Uint8Array): Promise<boolean> {
+  const record = await platform.kv.get<EncryptedRecord>(VAULT_KEYS.PIN_TOKEN)
+  if (!record) return false
+  return decryptWithKey(record, masterKey) === PIN_SENTINEL
+}
+
+export async function saveIdentityKeys(
+  platform: Platform,
+  keys: IdentityKeys,
+  masterKey: Uint8Array
+): Promise<void> {
+  await platform.kv.set(VAULT_KEYS.IDENTITY, encryptWithKey(JSON.stringify(keys), masterKey))
+}
+
+export async function loadIdentityKeys(
+  platform: Platform,
+  masterKey: Uint8Array
+): Promise<IdentityKeys | null> {
+  const record = await platform.kv.get<EncryptedRecord>(VAULT_KEYS.IDENTITY)
+  if (!record) return null
+  const plaintext = decryptWithKey(record, masterKey)
+  if (!plaintext) return null
+  return JSON.parse(plaintext) as IdentityKeys
+}
+
+/** True once an identity has been stored — drives "setup" vs "unlock" routing. */
+export async function hasAccount(platform: Platform): Promise<boolean> {
+  return (await platform.kv.get(VAULT_KEYS.IDENTITY)) !== undefined
+}
+
+export type UnlockResult =
+  | { ok: true; identity: IdentityKeys; masterKey: Uint8Array }
+  | { ok: false; reason: 'no-account' | 'wrong-pin' | 'corrupt' }
+
+/**
+ * Open the vault with a PIN. Fails closed: a wrong PIN and a damaged vault are
+ * reported as distinct outcomes so the UI never offers to wipe over a typo, and
+ * never presents corruption as a bad PIN.
+ */
+export async function unlock(platform: Platform, pin: string): Promise<UnlockResult> {
+  if (!(await hasAccount(platform))) return { ok: false, reason: 'no-account' }
+
+  const masterKey = await deriveMasterKey(platform, pin)
+  if (!(await verifyPinToken(platform, masterKey))) {
+    masterKey.fill(0)
+    return { ok: false, reason: 'wrong-pin' }
+  }
+
+  const identity = await loadIdentityKeys(platform, masterKey)
+  if (!identity) {
+    // The sentinel opened, so the key is right — the identity record itself is damaged.
+    masterKey.fill(0)
+    return { ok: false, reason: 'corrupt' }
+  }
+  return { ok: true, identity, masterKey }
+}
+
+/** Erase the vault and the device secret. Used by account deletion / panic wipe. */
+export async function wipeVault(platform: Platform): Promise<void> {
+  await platform.kv.clear()
+  await platform.secure.deleteSecret(DEVICE_SECRET_KEY)
+}

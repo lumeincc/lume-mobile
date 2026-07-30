@@ -13,8 +13,13 @@
       "expo-asset",
       [
         "expo-build-properties",
-        { "android": { "kotlinVersion": "1.9.25" } }
-      ]
+        {
+          "android": {
+            "kotlinVersion": "1.9.25"
+          }
+        }
+      ],
+      "expo-sqlite"
     ],
     "android": {
       "package": "app.lume.mobile"
