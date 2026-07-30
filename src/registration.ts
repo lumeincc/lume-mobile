@@ -13,6 +13,7 @@
 import { createAccountWithMnemonic, recoverIdentityFromMnemonic } from './crypto/mnemonic'
 import { generatePreKeyBundle } from './crypto/keys'
 import { authApi } from './lib/api'
+import { vaultClear, vaultSetAuth } from './crypto/keyVault'
 import {
   deriveMasterKey,
   saveIdentityKeys,
@@ -38,6 +39,15 @@ export type RegistrationResult =
   | { ok: true; account: RegisteredAccount }
   | { ok: false; error: string }
 
+/**
+ * Writes the account to the vault and then hands the live keys to the in-memory
+ * key vault, which is what lets every later request be signed.
+ *
+ * Ownership of the master key transfers to the key vault here — it holds the
+ * reference rather than a copy, so zeroing it after `vaultSetAuth` would leave
+ * the vault holding a key of zeros and every signature would fail. It is zeroed
+ * only on the failure path; `vaultClear` owns it from then on.
+ */
 async function persist(
   platform: Platform,
   pin: string,
@@ -59,9 +69,11 @@ async function persist(
       masterKey
     )
     await saveProfile(platform, profile, masterKey)
-  } finally {
+  } catch (e) {
     masterKey.fill(0)
+    throw e
   }
+  vaultSetAuth(identity, masterKey)
 }
 
 /**
@@ -72,6 +84,11 @@ export async function registerNewAccount(
   username: string,
   pin: string
 ): Promise<RegistrationResult> {
+  // A brand-new identity must register UNSIGNED. Any keys left in the vault from
+  // a previous account would sign the request, and the relay would reject it for
+  // declaring an identity key that does not match the signature.
+  vaultClear()
+
   const { mnemonic, identity } = await createAccountWithMnemonic()
   const bundle = generatePreKeyBundle(identity.exchange, identity.signing, ONE_TIME_PREKEY_COUNT)
 
@@ -106,6 +123,13 @@ export async function restoreAccountFromMnemonic(
   pin: string
 ): Promise<RegistrationResult> {
   const identity = await recoverIdentityFromMnemonic(mnemonic)
+
+  // Unlike a new account, a re-bind must be SIGNED: the relay verifies that the
+  // identity key in the body matches the signature, which is what proves this
+  // device really holds the identity it is reclaiming.
+  const rebindKey = await deriveMasterKey(platform, pin)
+  vaultSetAuth(identity, rebindKey)
+
   const bundle = generatePreKeyBundle(identity.exchange, identity.signing, ONE_TIME_PREKEY_COUNT)
 
   const { data, error } = await authApi.register({

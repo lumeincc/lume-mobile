@@ -46,25 +46,52 @@ async function main() {
   const check = await authApi.checkUsername(username)
   console.log(`username still available? ${check.data?.available} (expected false)`)
 
+  // A second account, so the bundle fetch is a real X3DH precondition: the relay
+  // (correctly) refuses to hand you your own bundle.
+  const platformB = createNodeTestPlatform()
+  const usernameB = `t_${Math.random().toString(36).slice(2, 10)}`
+  const resB = await registerNewAccount(platformB, usernameB, '123456')
+  if (!resB.ok) {
+    console.error(`FAIL register B: ${resB.error}`)
+    process.exit(1)
+  }
+  console.log(`registered @${resB.account.username} (second account)`)
+
+  // The key vault now holds B's keys, so this call is signed as B asking for A.
   const bundle = await authApi.getBundle(username)
   if (bundle.error) {
     console.error(`FAIL bundle: ${bundle.error}`)
     process.exit(1)
   }
   const identityMatches = bundle.data?.identityKey === res.account.identity.signing.publicKey
-  console.log(`bundle identityKey matches what we published? ${identityMatches}`)
+  console.log(`B fetched A's bundle; identityKey matches what A published? ${identityMatches}`)
+  console.log(`bundle carries a one-time prekey? ${bundle.data?.oneTimePrekey ? 'yes' : 'no'}`)
 
-  // The vault must hold the account locally after a successful registration.
-  const { unlock, loadPreKeyMaterial } = await import('../src/vault')
-  const opened = await unlock(platform, '123456')
-  console.log(`vault unlocks after registration? ${opened.ok}`)
+  // The vault must hold the account locally after a successful registration, and
+  // re-opening it must restore the ability to sign requests.
+  const { closeSession, openSession } = await import('../src/session')
+  const { loadPreKeyMaterial } = await import('../src/vault')
+
+  closeSession()
+  const opened = await openSession(platform, '123456')
+  console.log(`vault re-opens after registration? ${opened.ok}`)
+
+  let prekeysStored = false
+  let signedCallWorks = false
   if (opened.ok) {
-    const material = await loadPreKeyMaterial(platform, opened.masterKey)
+    const { vaultGetMasterKey } = await import('../src/crypto/keyVault')
+    const material = await loadPreKeyMaterial(platform, vaultGetMasterKey())
+    prekeysStored = !!material && material.oneTimePreKeys.length > 0
     console.log(`prekey secrets stored? ${material ? material.oneTimePreKeys.length + ' one-time keys' : 'NO'}`)
-    opened.masterKey.fill(0)
+
+    // A signed request only works if the reopened session populated the key vault.
+    const session = await authApi.getSession(res.account.userId)
+    signedCallWorks = !session.error
+    console.log(`signed request after reopen? ${signedCallWorks ? 'OK' : session.error}`)
   }
 
-  const allGood = check.data?.available === false && identityMatches && opened.ok
+  const allGood =
+    check.data?.available === false && identityMatches && opened.ok && prekeysStored && signedCallWorks
   console.log(allGood ? '\nRELAY CHECK PASSED' : '\nRELAY CHECK FAILED')
   process.exit(allGood ? 0 : 1)
 }

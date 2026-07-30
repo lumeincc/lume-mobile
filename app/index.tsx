@@ -8,11 +8,12 @@ import '../src/polyfills'
 import { useEffect, useState } from 'react'
 import { View, Text, TextInput, Pressable, ScrollView, StyleSheet } from 'react-native'
 import { registerNewAccount } from '../src/registration'
-import { hasAccount, unlock, wipeVault, loadProfile } from '../src/vault'
+import { hasAccount, wipeVault } from '../src/vault'
+import { openSession } from '../src/session'
 import { devicePlatform } from '../src/platform/reactNativeFull'
 import { verifyPbkdf2Parity, nativePbkdf2Available } from '../src/platform/nativeCrypto'
 import { API_URL } from '../src/lib/config'
-import { healthApi } from '../src/lib/api'
+import { healthApi, authApi } from '../src/lib/api'
 
 /**
  * Setup and unlock against the real relay: register publishes only public keys,
@@ -83,16 +84,17 @@ export default function Index() {
 
   const onUnlock = () =>
     run(async () => {
-      const res = await unlock(devicePlatform, pin)
+      // openSession also loads the keys into the in-memory vault, without which
+      // the very next authenticated request could not be signed.
+      const res = await openSession(devicePlatform, pin)
       if (!res.ok) return `UNLOCK FAILED: ${res.reason}`
-      const profile = await loadProfile(devicePlatform, res.masterKey)
-      const keyLen = res.masterKey.length
-      res.masterKey.fill(0)
+
+      const session = res.profile ? await authApi.getSession(res.profile.userId) : null
       return (
         `VAULT OPENED\n\n` +
-        (profile ? `account: @${profile.username}\nserver id: ${profile.userId}\n\n` : '') +
+        (res.profile ? `account: @${res.profile.username}\nserver id: ${res.profile.userId}\n\n` : '') +
         `signing pub:\n${res.identity.signing.publicKey}\n\n` +
-        `master key: ${keyLen} bytes (PIN + keystore secret)`
+        (session ? `signed request to relay: ${session.error ? `FAILED — ${session.error}` : 'OK'}` : '')
       )
     })
 
