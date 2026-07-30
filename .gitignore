@@ -21,3 +21,6 @@ ios/
 Thumbs.db
 .vscode/
 .idea/
+
+# Local simulation build output
+.tmp/

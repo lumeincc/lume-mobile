@@ -10,20 +10,27 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "sim:build": "esbuild scripts/device-sim.ts --bundle --platform=node --format=esm --main-fields=react-native,browser,module,main --conditions=react-native,browser,import --outfile=.tmp/device-sim.mjs --log-level=warning",
+    "sim": "npm run sim:build && node .tmp/device-sim.mjs",
+    "sim:negative": "npm run sim:build && node .tmp/device-sim.mjs --no-polyfills",
+    "verify": "npm test && npm run sim && npm run sim:negative && expo export -p android --output-dir .tmp/export"
   },
   "dependencies": {
     "@noble/hashes": "^2.2.0",
     "bip39": "^3.1.0",
+    "buffer": "^6.0.3",
     "expo": "~52.0.0",
     "expo-asset": "~11.0.5",
     "expo-build-properties": "~0.13.3",
+    "expo-constants": "~17.0.8",
+    "expo-linking": "~7.0.5",
     "expo-router": "~4.0.0",
     "expo-secure-store": "~14.0.0",
     "expo-splash-screen": "~0.29.24",
     "expo-status-bar": "~2.0.1",
     "react": "18.3.1",
-    "react-native": "0.76.5",
+    "react-native": "0.76.9",
     "react-native-get-random-values": "~1.11.0",
     "react-native-safe-area-context": "4.12.0",
     "react-native-screens": "~4.4.0",
@@ -33,6 +40,7 @@
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/react": "~18.3.0",
+    "esbuild": "^0.21.5",
     "typescript": "^5.5.0",
     "vitest": "^2.1.8"
   }

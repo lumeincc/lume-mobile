@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: LicenseRef-LUME-Source-Available
 // Copyright (C) 2026 LUME Inc
 
+// Polyfills before anything crypto-adjacent. Route modules are not guaranteed to
+// evaluate after _layout, and the import is idempotent, so it is repeated here.
+import '../src/polyfills'
+
 import { useState } from 'react'
 import { View, Text, TextInput, Pressable, ScrollView, StyleSheet } from 'react-native'
 import { createIdentity } from '../src/onboarding'
