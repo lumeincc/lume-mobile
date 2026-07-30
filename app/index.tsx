@@ -10,6 +10,7 @@ import { View, Text, TextInput, Pressable, ScrollView, StyleSheet } from 'react-
 import { createAccount } from '../src/onboarding'
 import { hasAccount, unlock, wipeVault } from '../src/vault'
 import { devicePlatform } from '../src/platform/reactNativeFull'
+import { verifyPbkdf2Parity, nativePbkdf2Available } from '../src/platform/nativeCrypto'
 
 /**
  * Vault walkthrough: setup on first launch, unlock on every launch after.
@@ -89,6 +90,19 @@ export default function Index() {
       return 'VAULT WIPED (database + keystore secret)'
     })
 
+  const onParity = () =>
+    run(async () => {
+      const r = await verifyPbkdf2Parity()
+      return (
+        `KDF PARITY (2000 iterations)\n\n` +
+        `native module: ${r.native ? 'present' : 'MISSING — falling back to JS'}\n` +
+        `bytes match:   ${r.match ? 'YES ✓' : 'NO ✗'}\n` +
+        `native: ${r.nativeMs}ms   pure JS: ${r.jsMs}ms\n` +
+        `speedup: ${r.jsMs > 0 && r.nativeMs > 0 ? (r.jsMs / r.nativeMs).toFixed(1) : '?'}×\n\n` +
+        `digest: ${r.digestPrefix}…`
+      )
+    })
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>{ready ? (existing ? 'Unlock vault' : 'Create account') : 'Checking vault…'}</Text>
@@ -117,6 +131,10 @@ export default function Index() {
           <Text style={styles.buttonText}>{busy ? 'Working…' : 'Create account'}</Text>
         </Pressable>
       )}
+
+      <Pressable style={[styles.secondary, busy && styles.disabled]} onPress={onParity} disabled={busy}>
+        <Text style={styles.secondaryText}>Check KDF ({nativePbkdf2Available ? 'native' : 'JS only'})</Text>
+      </Pressable>
 
       <Pressable style={[styles.secondary, busy && styles.disabled]} onPress={onWipe} disabled={busy}>
         <Text style={styles.secondaryText}>Wipe vault</Text>

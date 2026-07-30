@@ -11,11 +11,12 @@
  */
 
 import type { Platform } from './adapter'
-import { reactNativePlatform } from './reactNative'
+import { devicePlatformCrypto } from './nativeCrypto'
 import { sqliteKeyValueStore, keystoreSecretStore } from './reactNativeStorage'
 
 export const devicePlatform: Platform = {
-  crypto: reactNativePlatform,
+  // Native PBKDF2 with a pure-JS fallback; see nativeCrypto.ts.
+  crypto: devicePlatformCrypto,
   kv: sqliteKeyValueStore,
   secure: keystoreSecretStore,
 }
