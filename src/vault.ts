@@ -21,7 +21,7 @@
 
 import nacl from 'tweetnacl'
 import { encodeBase64, decodeBase64 } from 'tweetnacl-util'
-import type { IdentityKeys } from './crypto/keys'
+import type { IdentityKeys, KeyPair } from './crypto/keys'
 import type { Platform } from './platform/adapter'
 
 /** Storage keys. Names match the web client so the two schemas stay recognisable. */
@@ -29,6 +29,8 @@ export const VAULT_KEYS = {
   IDENTITY: 'identity_keys',
   ENCRYPTION_SALT: 'encryption_salt',
   PIN_TOKEN: 'pin_hash',
+  PREKEYS: 'prekeys',
+  PROFILE: 'profile',
 } as const
 
 /** Keystore entry holding the device secret. Never written to app storage. */
@@ -167,6 +169,59 @@ export async function loadIdentityKeys(
   const plaintext = decryptWithKey(record, masterKey)
   if (!plaintext) return null
   return JSON.parse(plaintext) as IdentityKeys
+}
+
+/**
+ * The private halves of the prekey bundle. The server only ever sees the public
+ * keys; these secrets stay here so this device can answer an X3DH handshake and
+ * consume one-time prekeys.
+ */
+export interface PreKeyMaterial {
+  signedPreKey: KeyPair
+  oneTimePreKeys: KeyPair[]
+  updatedAt: number
+}
+
+export async function savePreKeyMaterial(
+  platform: Platform,
+  material: PreKeyMaterial,
+  masterKey: Uint8Array
+): Promise<void> {
+  await platform.kv.set(VAULT_KEYS.PREKEYS, encryptWithKey(JSON.stringify(material), masterKey))
+}
+
+export async function loadPreKeyMaterial(
+  platform: Platform,
+  masterKey: Uint8Array
+): Promise<PreKeyMaterial | null> {
+  const record = await platform.kv.get<EncryptedRecord>(VAULT_KEYS.PREKEYS)
+  if (!record) return null
+  const plaintext = decryptWithKey(record, masterKey)
+  return plaintext ? (JSON.parse(plaintext) as PreKeyMaterial) : null
+}
+
+/** Non-secret account facts (username, server id) — still sealed, to avoid leaking them at rest. */
+export interface AccountProfile {
+  userId: string
+  username: string
+}
+
+export async function saveProfile(
+  platform: Platform,
+  profile: AccountProfile,
+  masterKey: Uint8Array
+): Promise<void> {
+  await platform.kv.set(VAULT_KEYS.PROFILE, encryptWithKey(JSON.stringify(profile), masterKey))
+}
+
+export async function loadProfile(
+  platform: Platform,
+  masterKey: Uint8Array
+): Promise<AccountProfile | null> {
+  const record = await platform.kv.get<EncryptedRecord>(VAULT_KEYS.PROFILE)
+  if (!record) return null
+  const plaintext = decryptWithKey(record, masterKey)
+  return plaintext ? (JSON.parse(plaintext) as AccountProfile) : null
 }
 
 /** True once an identity has been stored — drives "setup" vs "unlock" routing. */

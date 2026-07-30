@@ -7,19 +7,21 @@ import '../src/polyfills'
 
 import { useEffect, useState } from 'react'
 import { View, Text, TextInput, Pressable, ScrollView, StyleSheet } from 'react-native'
-import { createAccount } from '../src/onboarding'
-import { hasAccount, unlock, wipeVault } from '../src/vault'
+import { registerNewAccount } from '../src/registration'
+import { hasAccount, unlock, wipeVault, loadProfile } from '../src/vault'
 import { devicePlatform } from '../src/platform/reactNativeFull'
 import { verifyPbkdf2Parity, nativePbkdf2Available } from '../src/platform/nativeCrypto'
+import { API_URL } from '../src/lib/config'
+import { healthApi } from '../src/lib/api'
 
 /**
- * Vault walkthrough: setup on first launch, unlock on every launch after.
- * Proves the encrypted SQLite vault + keystore-backed device secret survive a
- * real app restart, which is what the storage layer exists to do.
+ * Setup and unlock against the real relay: register publishes only public keys,
+ * then the identity and prekey secrets are sealed in the local vault.
  */
 export default function Index() {
   const [ready, setReady] = useState(false)
   const [existing, setExisting] = useState(false)
+  const [username, setUsername] = useState('')
   const [pin, setPin] = useState('123456')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -49,8 +51,7 @@ export default function Index() {
     setResult(null)
     const started = Date.now()
     try {
-      const text = fn ? await fn() : ''
-      setResult(`${text}\n\ntook ${Date.now() - started}ms`)
+      setResult(`${await fn()}\n\ntook ${Date.now() - started}ms`)
     } catch (e) {
       setError(describe(e))
     } finally {
@@ -59,14 +60,24 @@ export default function Index() {
     }
   }
 
-  const onCreate = () =>
+  const onPing = () =>
     run(async () => {
-      const { mnemonic, identity } = await createAccount(devicePlatform, pin)
+      const { data, error: err } = await healthApi.check()
+      if (err) return `RELAY UNREACHABLE\n${API_URL}\n\n${err}`
+      return `RELAY OK\n${API_URL}\n\nstatus: ${data?.status ?? '?'}`
+    })
+
+  const onRegister = () =>
+    run(async () => {
+      const name = username.trim()
+      if (name.length < 3) return 'Pick a username of at least 3 characters.'
+      const res = await registerNewAccount(devicePlatform, name, pin)
+      if (!res.ok) return `REGISTRATION FAILED\n\n${res.error}`
       return (
-        `ACCOUNT CREATED & SEALED IN SQLITE\n\n` +
-        `recovery phrase (write it down):\n${mnemonic}\n\n` +
-        `signing pub:\n${identity.signing.publicKey}\n\n` +
-        `Now force-close the app and reopen it — it should ask to UNLOCK.`
+        `REGISTERED AS @${res.account.username}\n\n` +
+        `server id: ${res.account.userId}\n\n` +
+        `recovery phrase (write it down):\n${res.account.mnemonic}\n\n` +
+        `Only public keys were sent. Identity and prekey secrets are sealed locally.`
       )
     })
 
@@ -74,13 +85,25 @@ export default function Index() {
     run(async () => {
       const res = await unlock(devicePlatform, pin)
       if (!res.ok) return `UNLOCK FAILED: ${res.reason}`
+      const profile = await loadProfile(devicePlatform, res.masterKey)
       const keyLen = res.masterKey.length
       res.masterKey.fill(0)
       return (
         `VAULT OPENED\n\n` +
+        (profile ? `account: @${profile.username}\nserver id: ${profile.userId}\n\n` : '') +
         `signing pub:\n${res.identity.signing.publicKey}\n\n` +
-        `exchange pub:\n${res.identity.exchange.publicKey}\n\n` +
         `master key: ${keyLen} bytes (PIN + keystore secret)`
+      )
+    })
+
+  const onParity = () =>
+    run(async () => {
+      const r = await verifyPbkdf2Parity()
+      return (
+        `KDF PARITY (2000 iterations)\n\n` +
+        `native module: ${r.native ? 'present' : 'MISSING — falling back to JS'}\n` +
+        `bytes match:   ${r.match ? 'YES' : 'NO'}\n` +
+        `native: ${r.nativeMs}ms   pure JS: ${r.jsMs}ms`
       )
     })
 
@@ -90,27 +113,28 @@ export default function Index() {
       return 'VAULT WIPED (database + keystore secret)'
     })
 
-  const onParity = () =>
-    run(async () => {
-      const r = await verifyPbkdf2Parity()
-      return (
-        `KDF PARITY (2000 iterations)\n\n` +
-        `native module: ${r.native ? 'present' : 'MISSING — falling back to JS'}\n` +
-        `bytes match:   ${r.match ? 'YES ✓' : 'NO ✗'}\n` +
-        `native: ${r.nativeMs}ms   pure JS: ${r.jsMs}ms\n` +
-        `speedup: ${r.jsMs > 0 && r.nativeMs > 0 ? (r.jsMs / r.nativeMs).toFixed(1) : '?'}×\n\n` +
-        `digest: ${r.digestPrefix}…`
-      )
-    })
-
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>{ready ? (existing ? 'Unlock vault' : 'Create account') : 'Checking vault…'}</Text>
       <Text style={styles.sub}>
         {existing
           ? 'An encrypted account is stored on this device. Enter the PIN to open it.'
-          : 'Creates an identity and seals it in an encrypted SQLite vault, keyed by your PIN plus a secret held in the Android keystore.'}
+          : 'Publishes your public keys to the relay, then seals the identity and prekey secrets in an encrypted vault on this device.'}
       </Text>
+
+      {!existing && (
+        <>
+          <Text style={styles.label}>Username</Text>
+          <TextInput
+            style={styles.input}
+            value={username}
+            onChangeText={setUsername}
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder="alice"
+          />
+        </>
+      )}
 
       <Text style={styles.label}>PIN</Text>
       <TextInput
@@ -127,10 +151,14 @@ export default function Index() {
           <Text style={styles.buttonText}>{busy ? 'Working…' : 'Unlock'}</Text>
         </Pressable>
       ) : (
-        <Pressable style={[styles.button, busy && styles.disabled]} onPress={onCreate} disabled={busy}>
-          <Text style={styles.buttonText}>{busy ? 'Working…' : 'Create account'}</Text>
+        <Pressable style={[styles.button, busy && styles.disabled]} onPress={onRegister} disabled={busy}>
+          <Text style={styles.buttonText}>{busy ? 'Working…' : 'Register with relay'}</Text>
         </Pressable>
       )}
+
+      <Pressable style={[styles.secondary, busy && styles.disabled]} onPress={onPing} disabled={busy}>
+        <Text style={styles.secondaryText}>Ping relay</Text>
+      </Pressable>
 
       <Pressable style={[styles.secondary, busy && styles.disabled]} onPress={onParity} disabled={busy}>
         <Text style={styles.secondaryText}>Check KDF ({nativePbkdf2Available ? 'native' : 'JS only'})</Text>
@@ -151,10 +179,10 @@ export default function Index() {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20, gap: 12 },
+  container: { padding: 20, gap: 10 },
   title: { fontSize: 22, fontWeight: '600' },
   sub: { fontSize: 13, opacity: 0.7 },
-  label: { fontSize: 13, marginTop: 8, opacity: 0.7 },
+  label: { fontSize: 13, marginTop: 6, opacity: 0.7 },
   input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12, fontSize: 16 },
   button: { backgroundColor: '#111', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 8 },
   disabled: { opacity: 0.5 },

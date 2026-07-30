@@ -14,7 +14,8 @@
     "sim:build": "esbuild scripts/device-sim.ts --bundle --platform=node --format=esm --main-fields=react-native,browser,module,main --conditions=react-native,browser,import --outfile=.tmp/device-sim.mjs --log-level=warning",
     "sim": "npm run sim:build && node .tmp/device-sim.mjs",
     "sim:negative": "npm run sim:build && node .tmp/device-sim.mjs --no-polyfills",
-    "verify": "npm test && npm run sim && npm run sim:negative && expo export -p android --output-dir .tmp/export"
+    "verify": "npm test && npm run sim && npm run sim:negative && expo export -p android --output-dir .tmp/export",
+    "relay:check": "esbuild scripts/relay-check.ts --bundle --platform=node --format=cjs --outfile=.tmp/relay-check.cjs --log-level=warning && node .tmp/relay-check.cjs"
   },
   "dependencies": {
     "@noble/hashes": "^2.2.0",
@@ -36,7 +37,8 @@
     "react-native-safe-area-context": "4.12.0",
     "react-native-screens": "~4.4.0",
     "tweetnacl": "^1.0.3",
-    "tweetnacl-util": "^0.15.1"
+    "tweetnacl-util": "^0.15.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
