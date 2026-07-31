@@ -16,7 +16,8 @@
     "sim:negative": "npm run sim:build && node .tmp/device-sim.mjs --no-polyfills",
     "verify": "npm test && npm run sim && npm run sim:negative && expo export -p android --output-dir .tmp/export",
     "relay:check": "esbuild scripts/relay-check.ts --bundle --platform=node --format=cjs --outfile=.tmp/relay-check.cjs --log-level=warning && node .tmp/relay-check.cjs",
-    "e2e:message": "esbuild scripts/e2e-message.ts --bundle --platform=node --format=cjs --outfile=.tmp/e2e-message.cjs --log-level=warning && node .tmp/e2e-message.cjs"
+    "e2e:message": "esbuild scripts/e2e-message.ts --bundle --platform=node --format=cjs --outfile=.tmp/e2e-message.cjs --log-level=warning && node .tmp/e2e-message.cjs",
+    "e2e:realtime": "esbuild scripts/e2e-realtime.ts --bundle --platform=node --format=cjs --external:ws --outfile=.tmp/e2e-realtime.cjs --log-level=warning && node .tmp/e2e-realtime.cjs"
   },
   "dependencies": {
     "@noble/hashes": "^2.2.0",
@@ -44,8 +45,10 @@
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/react": "~18.3.0",
+    "@types/ws": "^8.18.1",
     "esbuild": "^0.21.5",
     "typescript": "^5.5.0",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "ws": "^8.21.1"
   }
 }
