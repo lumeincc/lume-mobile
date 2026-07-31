@@ -20,8 +20,11 @@
  *   - a fresh X3DH session is NOT persisted when the send fails, so a retry
  *     re-sends the handshake instead of leaving the recipient unable to decrypt.
  *
- * Note the two layers: the ratchet wraps a payload that is itself sealed with
- * nacl-box between the two exchange identity keys.
+ * The plaintext inside the ratchet is the cross-client contract; see
+ * lib/wirePayload.ts. Do not reach for lib/messagePayload.ts here — the web
+ * client only uses that module in its own tests, and wrapping messages in its
+ * extra nacl-box layer is what made every message from this client render as
+ * "[Unable to decrypt message]" on the web.
  */
 
 import { decodeBase64 } from 'tweetnacl-util'
@@ -48,7 +51,7 @@ import {
 import { findOneTimePreKey, deleteOneTimePreKey, loadPreKeyMaterial } from './crypto/storage'
 import { selectRespondSpk } from './crypto/spkRotation'
 import { encodeRatchetEnvelope, parseRatchetEnvelope } from './lib/ratchetPayload'
-import { encodeMessagePayload, decodeMessagePayload } from './lib/messagePayload'
+import { encodeWirePayload, decodeWirePayload } from './lib/wirePayload'
 import {
   bundleMatchesTrustedIdentity,
   inboundSenderMatchesTrustedIdentity,
@@ -133,17 +136,7 @@ export async function sendMessage(
     }
   }
 
-  const ownKeys = vaultGetExchangeKeyPair()
-  const plaintext = encodeMessagePayload(
-    text,
-    timestamp,
-    null,
-    ownKeys.publicKey,
-    ownKeys.secretKey,
-    recipientExchangeKey
-  )
-
-  const encrypted = ratchetEncrypt(session, new TextEncoder().encode(plaintext))
+  const encrypted = ratchetEncrypt(session, new TextEncoder().encode(encodeWirePayload(text, timestamp)))
   const encryptedPayload = encodeRatchetEnvelope({
     encrypted,
     timestamp,
@@ -235,8 +228,7 @@ export async function receiveMessage(
   const plaintextBytes = ratchetDecrypt(session, encrypted)
   if (!plaintextBytes) return { ok: false, error: 'Decryption failed' }
 
-  const ownKeys = vaultGetExchangeKeyPair()
-  const decoded = decodeMessagePayload(new TextDecoder().decode(plaintextBytes), ownKeys.secretKey)
+  const decoded = decodeWirePayload(new TextDecoder().decode(plaintextBytes))
   if (!decoded) return { ok: false, error: 'Unreadable message payload' }
 
   // Commit only after a fully successful decrypt, and only then burn the
@@ -246,5 +238,5 @@ export async function receiveMessage(
     await deleteOneTimePreKey(consumedOpkPublicKey, vaultGetMasterKey())
   }
 
-  return { ok: true, text: decoded.content, timestamp: decoded.timestamp ?? envelope.timestamp }
+  return { ok: true, text: decoded.content, timestamp: decoded.timestamp }
 }

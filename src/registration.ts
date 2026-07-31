@@ -20,6 +20,7 @@ import {
   savePinToken,
   savePreKeyMaterial,
   saveProfile,
+  wipeVault,
 } from './vault'
 import type { IdentityKeys } from './crypto/keys'
 import type { Platform } from './platform/adapter'
@@ -88,6 +89,13 @@ export async function registerNewAccount(
   // a previous account would sign the request, and the relay would reject it for
   // declaring an identity key that does not match the signature.
   vaultClear()
+
+  // And the previous account's records must go with it. Leaving them is not a
+  // tidiness issue, it is a correctness and privacy one: the salt is reused, so
+  // the same PIN derives the same master key and the OLD account's contacts and
+  // messages decrypt straight into the NEW one. A different PIN is no better —
+  // the records simply stop opening and the store reports itself as corrupt.
+  await wipeVault(platform)
 
   const { mnemonic, identity } = await createAccountWithMnemonic()
   const bundle = generatePreKeyBundle(identity.exchange, identity.signing, ONE_TIME_PREKEY_COUNT)
@@ -173,6 +181,11 @@ export async function restoreAccountFromMnemonic(
   pin: string
 ): Promise<RegistrationResult> {
   const identity = await recoverIdentityFromMnemonic(mnemonic)
+
+  // Restoring replaces whatever account was on this device, so its records go
+  // first — for the same reason as above.
+  vaultClear()
+  await wipeVault(platform)
 
   // Unlike a new account, a re-bind must be SIGNED: the relay verifies that the
   // identity key in the body matches the signature, which is what proves this
