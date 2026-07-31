@@ -22,6 +22,7 @@
 import nacl from 'tweetnacl'
 import { encodeBase64, decodeBase64 } from 'tweetnacl-util'
 import type { IdentityKeys, KeyPair } from './crypto/keys'
+import type { SerializedSession } from './crypto/ratchet'
 import type { Platform } from './platform/adapter'
 
 /** Storage keys. Names match the web client so the two schemas stay recognisable. */
@@ -31,6 +32,9 @@ export const VAULT_KEYS = {
   PIN_TOKEN: 'pin_hash',
   PREKEYS: 'prekeys',
   PROFILE: 'profile',
+  CONTACTS: 'contacts',
+  SESSIONS: 'sessions',
+  CHATS: 'chats',
 } as const
 
 /** Keystore entry holding the device secret. Never written to app storage. */
@@ -230,6 +234,95 @@ export async function loadProfile(
   if (!record) return null
   const plaintext = decryptWithKey(record, masterKey)
   return plaintext ? (JSON.parse(plaintext) as AccountProfile) : null
+}
+
+/**
+ * A contact, in the web client's shape.
+ *
+ * `publicKey` and `exchangeKey` are what identity pinning checks against, so this
+ * record is a security boundary, not just a display convenience: losing it would
+ * silently downgrade every later handshake back to trust-on-first-use.
+ */
+export interface Contact {
+  id: string
+  username: string
+  publicKey: string
+  exchangeKey: string
+  displayName?: string
+  addedAt: number
+  verified?: boolean
+  verifiedAt?: number
+}
+
+export async function saveContacts(
+  platform: Platform,
+  contacts: Contact[],
+  masterKey: Uint8Array
+): Promise<void> {
+  await platform.kv.set(VAULT_KEYS.CONTACTS, encryptWithKey(JSON.stringify(contacts), masterKey))
+}
+
+export async function loadContacts(platform: Platform, masterKey: Uint8Array): Promise<Contact[]> {
+  const record = await platform.kv.get<EncryptedRecord>(VAULT_KEYS.CONTACTS)
+  if (!record) return []
+  const plaintext = decryptWithKey(record, masterKey)
+  if (!plaintext) return []
+  const parsed = JSON.parse(plaintext) as unknown
+  return Array.isArray(parsed) ? (parsed as Contact[]) : []
+}
+
+/** Serialized Double Ratchet sessions, keyed by contact id. */
+export type RatchetSessions = Record<string, SerializedSession>
+
+export async function saveRatchetSessions(
+  platform: Platform,
+  sessions: RatchetSessions,
+  masterKey: Uint8Array
+): Promise<void> {
+  await platform.kv.set(VAULT_KEYS.SESSIONS, encryptWithKey(JSON.stringify(sessions), masterKey))
+}
+
+export async function loadRatchetSessions(
+  platform: Platform,
+  masterKey: Uint8Array
+): Promise<RatchetSessions> {
+  const record = await platform.kv.get<EncryptedRecord>(VAULT_KEYS.SESSIONS)
+  if (!record) return {}
+  const plaintext = decryptWithKey(record, masterKey)
+  if (!plaintext) return {}
+  const parsed = JSON.parse(plaintext) as unknown
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+  return parsed as RatchetSessions
+}
+
+/** A decrypted message, held only on this device. */
+export interface StoredMessage {
+  id: string
+  contactId: string
+  /** True when this device sent it. */
+  outgoing: boolean
+  text: string
+  timestamp: number
+}
+
+export async function saveMessages(
+  platform: Platform,
+  messages: StoredMessage[],
+  masterKey: Uint8Array
+): Promise<void> {
+  await platform.kv.set(VAULT_KEYS.CHATS, encryptWithKey(JSON.stringify(messages), masterKey))
+}
+
+export async function loadMessages(
+  platform: Platform,
+  masterKey: Uint8Array
+): Promise<StoredMessage[]> {
+  const record = await platform.kv.get<EncryptedRecord>(VAULT_KEYS.CHATS)
+  if (!record) return []
+  const plaintext = decryptWithKey(record, masterKey)
+  if (!plaintext) return []
+  const parsed = JSON.parse(plaintext) as unknown
+  return Array.isArray(parsed) ? (parsed as StoredMessage[]) : []
 }
 
 /** True once an identity has been stored — drives "setup" vs "unlock" routing. */

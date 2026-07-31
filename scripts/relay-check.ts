@@ -72,7 +72,7 @@ async function main() {
   const { closeSession, openSession } = await import('../src/session')
   const { loadPreKeyMaterial } = await import('../src/vault')
 
-  closeSession()
+  await closeSession()
   const opened = await openSession(platform, '123456')
   console.log(`vault re-opens after registration? ${opened.ok}`)
 

@@ -114,7 +114,56 @@ async function main() {
   const differentCiphertext = msg.encryptedPayload !== msg2.encryptedPayload
   console.log(`  ciphertexts differ between messages? ${differentCiphertext}\n`)
 
-  const pass = matches && !leaks && received2.text === second && differentCiphertext
+  // ── Restart both sides, then keep talking ─────────────────────────────────
+  // The ratchet advances with every message, so if that state is not persisted a
+  // conversation silently dies the moment either app is closed. Dropping every
+  // in-memory key here is exactly what a relaunch does.
+  const { closeSession } = await import('../src/session')
+  const { vaultGetSession, vaultGetAllSessions } = await import('../src/crypto/keyVault')
+
+  const describeSession = (label: string, id: string) => {
+    const s = vaultGetSession(id)
+    console.log(
+      `  [${label}] sessions=${JSON.stringify(Object.keys(vaultGetAllSessions()))} ` +
+        (s
+          ? `send#=${s.sendingMessageNumber} recv#=${s.receivingMessageNumber} prevLen=${s.previousSendingChainLength}`
+          : 'NO SESSION')
+    )
+  }
+
+  describeSession('B before restart', a.account.userId)
+  await closeSession()
+
+  setCurrentPlatform(platformA)
+  const reopenedA = await openSession(platformA, PIN)
+  if (!reopenedA.ok) throw new Error(`reopen A: ${reopenedA.reason}`)
+  describeSession('A after restart', b.account.userId)
+
+  const afterRestart = 'Третье — уже после перезапуска обоих клиентов.'
+  const sent3 = await sendMessage(a.account.userId, { id: b.account.userId, username: nameB }, afterRestart)
+  if (!sent3.ok) throw new Error(`send 3: ${sent3.error}`)
+
+  await closeSession()
+  setCurrentPlatform(platformB)
+  const reopenedB = await openSession(platformB, PIN)
+  if (!reopenedB.ok) throw new Error(`reopen B: ${reopenedB.reason}`)
+
+  describeSession("B after restart", a.account.userId)
+  const pending3 = await messagesApi.getPending(b.account.userId)
+  const msg3 = pending3.data?.messages.find(m => m.id === sent3.messageId)
+  if (!msg3) throw new Error('third message not found')
+
+  const received3 = await receiveMessage({
+    id: msg3.id,
+    senderId: msg3.senderId,
+    encryptedPayload: msg3.encryptedPayload,
+  })
+  const survived = received3.ok && received3.text === afterRestart
+  console.log(`B decrypted #3 after a restart of BOTH sides: ${survived ? `"${received3.ok ? received3.text : ''}"` : `FAILED — ${received3.ok ? '' : received3.error}`}`)
+  console.log(`  ratchet state survived the restart? ${survived}\n`)
+
+  const pass =
+    matches && !leaks && received2.text === second && differentCiphertext && survived
   console.log(pass ? 'E2E MESSAGE TEST PASSED' : 'E2E MESSAGE TEST FAILED')
   process.exit(pass ? 0 : 1)
 }
