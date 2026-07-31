@@ -180,7 +180,15 @@ export interface PreKeyMaterial {
   signedPreKey: KeyPair
   oneTimePreKeys: KeyPair[]
   updatedAt: number
+  /** When the current signed prekey was generated — drives 7-day rotation. */
+  spkCreatedAt?: number
+  /** Kept through its grace window so in-flight X3DH sessions can still complete. */
+  previousSignedPreKey?: KeyPair
+  previousSpkRetiredAt?: number
 }
+
+/** The web client's name for the same shape; kept so vendored modules type-check. */
+export type LocalPreKeyMaterial = PreKeyMaterial
 
 export async function savePreKeyMaterial(
   platform: Platform,

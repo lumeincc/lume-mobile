@@ -15,7 +15,8 @@
     "sim": "npm run sim:build && node .tmp/device-sim.mjs",
     "sim:negative": "npm run sim:build && node .tmp/device-sim.mjs --no-polyfills",
     "verify": "npm test && npm run sim && npm run sim:negative && expo export -p android --output-dir .tmp/export",
-    "relay:check": "esbuild scripts/relay-check.ts --bundle --platform=node --format=cjs --outfile=.tmp/relay-check.cjs --log-level=warning && node .tmp/relay-check.cjs"
+    "relay:check": "esbuild scripts/relay-check.ts --bundle --platform=node --format=cjs --outfile=.tmp/relay-check.cjs --log-level=warning && node .tmp/relay-check.cjs",
+    "e2e:message": "esbuild scripts/e2e-message.ts --bundle --platform=node --format=cjs --outfile=.tmp/e2e-message.cjs --log-level=warning && node .tmp/e2e-message.cjs"
   },
   "dependencies": {
     "@noble/hashes": "^2.2.0",
