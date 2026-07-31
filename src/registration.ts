@@ -111,6 +111,56 @@ export async function registerNewAccount(
 }
 
 /**
+ * Silent re-bind: republish the identity this device already holds.
+ *
+ * The relay's user row is a cache of a client-authoritative identity. On a free
+ * tier the database is ephemeral, so a redeploy wipes it and every signed call
+ * starts answering "User not found" even though nothing is wrong with the
+ * account. The web client handles that by re-registering the same keys on
+ * unlock; this is the mobile equivalent.
+ *
+ * The identity, safety numbers and existing ratchet sessions are unchanged — only
+ * the server-side row and the published prekeys are recreated. Requires an open
+ * session, because the request is signed with the identity it re-registers,
+ * which is what proves ownership.
+ */
+export async function rebindIdentity(
+  platform: Platform,
+  identity: IdentityKeys,
+  username: string,
+  masterKey: Uint8Array
+): Promise<{ ok: true; userId: string } | { ok: false; error: string }> {
+  const bundle = generatePreKeyBundle(identity.exchange, identity.signing, ONE_TIME_PREKEY_COUNT)
+
+  const { data, error } = await authApi.register({
+    username,
+    identityKey: identity.signing.publicKey,
+    exchangeIdentityKey: identity.exchange.publicKey,
+    signedPrekey: bundle.signedPreKey.publicKey,
+    signedPrekeySignature: bundle.signature,
+    oneTimePrekeys: bundle.oneTimePreKeys.map((key, i) => ({
+      id: `${username}-prekey-${i}`,
+      publicKey: key.publicKey,
+    })),
+  })
+  if (error || !data) return { ok: false, error: error ?? 'Rebind failed' }
+
+  // The published prekeys changed, so the local secrets must follow or this
+  // device could not answer the handshakes it just advertised.
+  await savePreKeyMaterial(
+    platform,
+    {
+      signedPreKey: bundle.signedPreKey,
+      oneTimePreKeys: bundle.oneTimePreKeys,
+      updatedAt: Date.now(),
+    },
+    masterKey
+  )
+  await saveProfile(platform, { userId: data.id, username }, masterKey)
+  return { ok: true, userId: data.id }
+}
+
+/**
  * Re-bind an existing identity (recovered from its mnemonic) to the relay. The
  * server row is a cache of a client-authoritative identity, so re-registering the
  * same keys is how a new device — or a reset server — picks the account back up

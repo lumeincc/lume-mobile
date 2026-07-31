@@ -16,13 +16,14 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { ReactNode } from 'react'
 import { devicePlatform } from '../platform/reactNativeFull'
 import { openSession, closeSession, flushSessions } from '../session'
-import { registerNewAccount, restoreAccountFromMnemonic } from '../registration'
+import { registerNewAccount, restoreAccountFromMnemonic, rebindIdentity } from '../registration'
 import { hasAccount, loadMessages, saveMessages, saveContacts, loadContacts } from '../vault'
 import { sendMessage as engineSend, receiveMessage as engineReceive } from '../messaging'
 import { RealtimeClient, type ConnectionStatus } from '../realtime'
 import { authApi } from '../lib/api'
 import { vaultGetMasterKey } from '../crypto/keyVault'
 import type { AccountProfile, Contact, StoredMessage } from '../vault'
+import type { IdentityKeys } from '../crypto/keys'
 
 interface SessionState {
   ready: boolean
@@ -32,6 +33,8 @@ interface SessionState {
   contacts: Contact[]
   messages: StoredMessage[]
   connection: ConnectionStatus
+  /** Why the socket dropped, when it did — a bare "offline" hides real faults. */
+  connectionDetail: string | null
   error: string | null
 }
 
@@ -63,11 +66,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     contacts: [],
     messages: [],
     connection: 'idle',
+    connectionDetail: null,
     error: null,
   })
 
   const realtime = useRef<RealtimeClient | null>(null)
   const profileRef = useRef<AccountProfile | null>(null)
+  const identityRef = useRef<IdentityKeys | null>(null)
   const messagesRef = useRef<StoredMessage[]>([])
   const contactsRef = useRef<Contact[]>([])
 
@@ -137,16 +142,56 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   /** Pull anything queued while the app was closed, then stay connected. */
   const startRealtime = useCallback(
-    async (userId: string) => {
-      const pending = await messagesApiGetPending(userId)
-      for (const m of pending) await ingest(m)
+    async (initialUserId: string) => {
+      let userId = initialUserId
+      // Anything that goes wrong here used to return silently, which showed up
+      // as a permanently "idle" connection with no explanation. Report instead.
+      try {
+        const pending = await messagesApiGetPending(userId)
+        for (const m of pending) await ingest(m)
+      } catch (e) {
+        setState(s => ({ ...s, error: `Не удалось забрать сообщения: ${describe(e)}` }))
+      }
 
-      const token = await authApi.getSession(userId)
-      if (token.error || !token.data) return
+      let token = await authApi.getSession(userId)
+
+      // "User not found" means the relay lost its row, not that anything is wrong
+      // with this account — the identity here is authoritative. Republish it and
+      // carry on; the identity and safety numbers are unchanged.
+      if (token.error && /not found/i.test(token.error) && identityRef.current && profileRef.current) {
+        const rebind = await rebindIdentity(
+          devicePlatform,
+          identityRef.current,
+          profileRef.current.username,
+          vaultGetMasterKey()
+        )
+        if (rebind.ok) {
+          profileRef.current = { userId: rebind.userId, username: profileRef.current.username }
+          setState(s => ({ ...s, profile: profileRef.current }))
+          userId = rebind.userId
+          token = await authApi.getSession(userId)
+        }
+      }
+
+      if (token.error || !token.data) {
+        setState(s => ({
+          ...s,
+          connection: 'auth_error',
+          connectionDetail: token.error ?? 'сервер не выдал токен',
+        }))
+        return
+      }
 
       realtime.current?.disconnect()
       realtime.current = new RealtimeClient({
-        onStatus: connection => setState(s => ({ ...s, connection })),
+        onStatus: (connection, detail) =>
+          setState(s => ({
+            ...s,
+            connection,
+            connectionDetail: detail?.code
+              ? `${detail.code}${detail.reason ? `: ${detail.reason}` : ''}`
+              : null,
+          })),
         onMessage: m => void ingest(m),
         onTokenRefreshNeeded: async () => {
           const fresh = await authApi.getSession(userId)
@@ -159,8 +204,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   )
 
   const afterOpen = useCallback(
-    async (profile: AccountProfile | null, contacts: Contact[]) => {
+    async (profile: AccountProfile | null, contacts: Contact[], identity: IdentityKeys) => {
       profileRef.current = profile
+      identityRef.current = identity
       contactsRef.current = contacts
       const stored = await loadMessages(devicePlatform, vaultGetMasterKey())
       messagesRef.current = stored
@@ -187,7 +233,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (!res.ok) return { ok: false, error: res.error }
       const opened = await openSession(devicePlatform, pin)
       if (!opened.ok) return { ok: false, error: opened.reason }
-      await afterOpen(opened.profile, opened.contacts)
+      await afterOpen(opened.profile, opened.contacts, opened.identity)
       return { ok: true, mnemonic: res.account.mnemonic }
     },
     [afterOpen]
@@ -199,7 +245,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (!res.ok) return res.error
       const opened = await openSession(devicePlatform, pin)
       if (!opened.ok) return opened.reason
-      await afterOpen(opened.profile, opened.contacts)
+      await afterOpen(opened.profile, opened.contacts, opened.identity)
       return null
     },
     [afterOpen]
@@ -211,7 +257,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (!opened.ok) {
         return opened.reason === 'wrong-pin' ? 'Неверный PIN' : opened.reason
       }
-      await afterOpen(opened.profile, opened.contacts)
+      await afterOpen(opened.profile, opened.contacts, opened.identity)
       return null
     },
     [afterOpen]

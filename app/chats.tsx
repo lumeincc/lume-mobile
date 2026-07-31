@@ -4,40 +4,44 @@
 import '../src/polyfills'
 
 import { useMemo, useState } from 'react'
-import { FlatList, Modal, Pressable, Text, View } from 'react-native'
+import { FlatList, Modal, Pressable, Text, TextInput, View } from 'react-native'
 import { router } from 'expo-router'
 import { useSession } from '../src/store/session'
 import {
   Avatar,
-  Body,
-  Button,
   ErrorText,
   Field,
+  IconButton,
   OnlineDot,
+  Pill,
   Screen,
-  layout,
   usePalette,
 } from '../src/ui/components'
-import { radius, space, text } from '../src/ui/theme'
+import { metrics, radius, space, text } from '../src/ui/theme'
 
-/** Conversation list, newest first, with a live connection indicator. */
+/**
+ * Conversation list, laid out like the web's ChatListPanel: a borderless search
+ * field under the header, then rows separated by hairlines.
+ */
 export default function Chats() {
   const session = useSession()
   const p = usePalette()
+  const [query, setQuery] = useState('')
   const [adding, setAdding] = useState(false)
   const [username, setUsername] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const rows = useMemo(() => {
+    const needle = query.trim().toLowerCase()
     return session.contacts
+      .filter(c => !needle || c.username.toLowerCase().includes(needle))
       .map(contact => {
         const thread = session.messages.filter(m => m.contactId === contact.id)
-        const last = thread.length ? thread[thread.length - 1] : null
-        return { contact, last }
+        return { contact, last: thread.length ? thread[thread.length - 1] : null }
       })
       .sort((a, b) => (b.last?.timestamp ?? 0) - (a.last?.timestamp ?? 0))
-  }, [session.contacts, session.messages])
+  }, [session.contacts, session.messages, query])
 
   async function add() {
     setBusy(true)
@@ -54,33 +58,35 @@ export default function Chats() {
 
   return (
     <Screen>
-      <View
-        style={{
-          paddingHorizontal: space.lg,
-          paddingTop: space.lg,
-          paddingBottom: space.md,
-          borderBottomWidth: 1,
-          borderBottomColor: p.border,
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
-        <View>
-          <Text style={{ fontSize: 22, fontWeight: '700', color: p.textPrimary, letterSpacing: 0.5 }}>
-            LUME
-          </Text>
-          <View style={[layout.row, { gap: space.sm, marginTop: 2 }]}>
-            <OnlineDot online={session.connection === 'connected'} />
-            <Text style={{ fontSize: text.caption, color: p.textMuted }}>
-              {session.profile ? `@${session.profile.username}` : ''}
-              {session.connection === 'connected' ? '' : ' · нет связи'}
+      <View style={{ paddingHorizontal: space.lg, paddingTop: space.md, paddingBottom: space.sm }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 19, fontWeight: '700', color: p.textPrimary, letterSpacing: -0.2 }}>
+              Чаты
             </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
+              <OnlineDot online={session.connection === 'connected'} />
+              <Text style={{ fontSize: text.caption, color: p.textMuted }}>
+                {session.profile ? `@${session.profile.username}` : ''}
+                {session.connection === 'connected'
+                  ? ''
+                  : ` · ${connectionLabel(session.connection)}${session.connectionDetail ? ` (${session.connectionDetail})` : ''}`}
+              </Text>
+            </View>
           </View>
+          <IconButton glyph="＋" onPress={() => setAdding(true)} emphasis="primary" />
         </View>
-        <Pressable onPress={() => setAdding(true)} hitSlop={12}>
-          <Text style={{ fontSize: 28, color: p.textPrimary, lineHeight: 30 }}>+</Text>
-        </Pressable>
+
+        {/* .relative.mt-4 search: transparent, underlined only. */}
+        <View style={{ marginTop: space.lg, borderBottomWidth: 1, borderBottomColor: p.border }}>
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Поиск"
+            placeholderTextColor={p.textMuted}
+            style={{ paddingVertical: space.sm, fontSize: 14, color: p.textPrimary }}
+          />
+        </View>
       </View>
 
       <FlatList
@@ -88,10 +94,9 @@ export default function Chats() {
         keyExtractor={r => r.contact.id}
         contentContainerStyle={rows.length ? undefined : { flexGrow: 1, justifyContent: 'center' }}
         ListEmptyComponent={
-          <View style={{ alignItems: 'center', gap: space.sm, paddingHorizontal: space.xl }}>
-            <Body muted>Пока никого нет</Body>
-            <Text style={{ fontSize: text.body, color: p.textMuted, textAlign: 'center' }}>
-              Добавьте собеседника по имени пользователя, чтобы начать переписку.
+          <View style={{ paddingHorizontal: space.xl }}>
+            <Text style={{ fontSize: 14, color: p.textMuted, textAlign: 'center', lineHeight: 21 }}>
+              {query ? 'Ничего не найдено' : 'Пока пусто. Добавьте собеседника по имени пользователя.'}
             </Text>
           </View>
         }
@@ -99,44 +104,51 @@ export default function Chats() {
           <Pressable
             onPress={() => router.push(`/chat/${item.contact.id}`)}
             style={({ pressed }) => ({
+              minHeight: metrics.rowMinHeight,
+              paddingHorizontal: metrics.rowPaddingH,
+              paddingVertical: metrics.rowPaddingV,
+              borderBottomWidth: 1,
+              borderBottomColor: p.border,
+              backgroundColor: pressed ? p.surfaceAlt : 'transparent',
               flexDirection: 'row',
               alignItems: 'center',
               gap: space.md,
-              paddingHorizontal: space.lg,
-              paddingVertical: space.md,
-              backgroundColor: pressed ? p.surfaceAlt : 'transparent',
             })}
           >
             <Avatar name={item.contact.username} />
-            <View style={{ flex: 1, gap: 2 }}>
-              <Text style={{ fontSize: 15, fontWeight: '600', color: p.textPrimary }}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text
+                numberOfLines={1}
+                style={{ fontSize: text.body, fontWeight: '600', color: p.textPrimary }}
+              >
                 {item.contact.username}
               </Text>
-              <Text numberOfLines={1} style={{ fontSize: text.body, color: p.textMuted }}>
+              <Text numberOfLines={1} style={{ fontSize: 12, color: p.textSecondary, marginTop: 2 }}>
                 {item.last ? (item.last.outgoing ? `Вы: ${item.last.text}` : item.last.text) : 'Нет сообщений'}
               </Text>
             </View>
             {item.last ? (
-              <Text style={{ fontSize: text.caption, color: p.textMuted }}>{time(item.last.timestamp)}</Text>
+              <Text style={{ fontSize: text.caption, color: p.textMuted }}>{formatTime(item.last.timestamp)}</Text>
             ) : null}
           </Pressable>
         )}
       />
 
       <Modal visible={adding} transparent animationType="fade" onRequestClose={() => setAdding(false)}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}>
           <View
             style={{
               backgroundColor: p.background,
               borderTopLeftRadius: radius.lg,
               borderTopRightRadius: radius.lg,
               padding: space.lg,
+              paddingBottom: space.xl,
               gap: space.md,
             }}
           >
-            <Text style={{ fontSize: 17, fontWeight: '600', color: p.textPrimary }}>Новый чат</Text>
+            <Text style={{ fontSize: 17, fontWeight: '700', color: p.textPrimary }}>Новый чат</Text>
             <Field
-              label="ИМЯ ПОЛЬЗОВАТЕЛЯ"
+              label="Имя пользователя"
               value={username}
               onChangeText={setUsername}
               autoCapitalize="none"
@@ -144,9 +156,9 @@ export default function Chats() {
               placeholder="alice"
               autoFocus
             />
-            <ErrorText>{error}</ErrorText>
-            <Button title="Добавить" busy={busy} onPress={add} />
-            <Button variant="ghost" title="Отмена" onPress={() => setAdding(false)} />
+            {error ? <ErrorText>{error}</ErrorText> : null}
+            <Pill title="Добавить" busy={busy} onPress={add} />
+            <Pill variant="secondary" title="Отмена" onPress={() => setAdding(false)} />
           </View>
         </View>
       </Modal>
@@ -154,11 +166,26 @@ export default function Chats() {
   )
 }
 
-function time(ts: number) {
+/** A silent "offline" hides real faults, so the state is named. */
+function connectionLabel(status: string) {
+  switch (status) {
+    case 'connecting':
+      return 'подключение'
+    case 'auth_error':
+      return 'ошибка авторизации'
+    case 'idle':
+      return 'не подключено'
+    default:
+      return 'нет связи'
+  }
+}
+
+/** Same rule as the web: time today, date otherwise. */
+function formatTime(ts: number) {
   const d = new Date(ts)
-  const today = new Date()
-  const sameDay = d.toDateString() === today.toDateString()
-  return sameDay
-    ? `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-    : `${d.getDate()}.${String(d.getMonth() + 1).padStart(2, '0')}`
+  const now = new Date()
+  if (d.toDateString() === now.toDateString()) {
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  }
+  return `${d.getDate()} ${['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'][d.getMonth()]}`
 }

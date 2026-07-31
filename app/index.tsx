@@ -9,12 +9,22 @@ import { useEffect, useState } from 'react'
 import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native'
 import { router } from 'expo-router'
 import { useSession } from '../src/store/session'
-import { Body, Button, ErrorText, Field, Screen, Title, layout, usePalette } from '../src/ui/components'
-import { radius, space, text } from '../src/ui/theme'
+import {
+  AuthHero,
+  AuthHint,
+  AuthTitle,
+  ErrorText,
+  Field,
+  OrDivider,
+  Pill,
+  Screen,
+  usePalette,
+} from '../src/ui/components'
+import { metrics, radius, space } from '../src/ui/theme'
 
 /**
- * The gate: create an account, restore one, or unlock the one on this device.
- * Everything below happens locally — only public keys ever reach the relay.
+ * The auth screen, laid out like the web client's: a narrow centred column,
+ * a large centred title, then pill buttons.
  */
 export default function Index() {
   const session = useSession()
@@ -48,164 +58,187 @@ export default function Index() {
   if (!session.ready) {
     return (
       <Screen style={{ alignItems: 'center', justifyContent: 'center' }}>
-        <Body muted>Открываем хранилище…</Body>
+        <AuthHint>Открываем хранилище…</AuthHint>
       </Screen>
     )
   }
 
-  // Shown once, right after the account is created.
   if (recovery) {
     return (
       <Screen>
-        <ScrollView contentContainerStyle={layout.padded}>
-          <Title>Сохраните фразу</Title>
-          <Body>
-            Это единственный способ восстановить доступ на другом устройстве. Запишите её на бумаге —
-            фраза не хранится на сервере и не может быть выдана повторно.
-          </Body>
-          <View
-            style={{
-              backgroundColor: p.surface,
-              borderColor: p.border,
-              borderWidth: 1,
-              borderRadius: radius.md,
-              padding: space.lg,
-            }}
-          >
-            <Text style={{ color: p.textPrimary, fontSize: 16, lineHeight: 26, letterSpacing: 0.3 }}>
-              {recovery}
-            </Text>
-          </View>
-          <Button
-            title="Я записал фразу"
-            onPress={() => {
-              setRecovery(null)
-              router.replace('/chats')
-            }}
-          />
+        <ScrollView contentContainerStyle={styles.shell}>
+          <AuthHero>
+            <AuthTitle>Сохраните фразу</AuthTitle>
+            <AuthHint>
+              Единственный способ восстановить доступ. Запишите на бумаге — фраза не хранится на сервере.
+            </AuthHint>
+            <View
+              style={{
+                backgroundColor: p.surfaceStrong,
+                borderColor: p.border,
+                borderWidth: 1,
+                borderRadius: radius.md,
+                padding: space.lg,
+                marginTop: space.xs,
+              }}
+            >
+              <Text style={{ color: p.textPrimary, fontSize: 16, lineHeight: 27, letterSpacing: 0.2 }}>
+                {recovery}
+              </Text>
+            </View>
+            <Pill
+              title="Я записал фразу"
+              onPress={() => {
+                setRecovery(null)
+                router.replace('/chats')
+              }}
+            />
+          </AuthHero>
         </ScrollView>
       </Screen>
     )
   }
+
+  const title = mode === 'unlock' ? 'С возвращением' : mode === 'create' ? 'Добро пожаловать' : 'Восстановление'
+  const hint =
+    mode === 'unlock'
+      ? 'Введите PIN, чтобы открыть хранилище на этом устройстве.'
+      : mode === 'create'
+        ? 'Публикуется только открытый ключ. Всё остальное остаётся здесь.'
+        : 'Введите фразу из 12 слов и задайте новый PIN.'
 
   return (
     <Screen>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={[layout.padded, { flexGrow: 1, justifyContent: 'center' }]}>
-          <View style={{ gap: space.xs, marginBottom: space.sm }}>
-            <Text style={{ fontSize: 28, fontWeight: '700', color: p.textPrimary, letterSpacing: 1 }}>
+        <ScrollView contentContainerStyle={styles.shell} keyboardShouldPersistTaps="handled">
+          <AuthHero>
+            <Text
+              style={{
+                textAlign: 'center',
+                fontSize: 13,
+                letterSpacing: 3,
+                color: p.textMuted,
+                marginBottom: space.sm,
+              }}
+            >
               LUME
             </Text>
-            <Body muted>
-              {mode === 'unlock'
-                ? 'Введите PIN, чтобы открыть зашифрованное хранилище.'
-                : mode === 'create'
-                  ? 'Публикуется только открытый ключ. Всё остальное остаётся на устройстве.'
-                  : 'Восстановление по фразе из 12 слов.'}
-            </Body>
-          </View>
+            <AuthTitle>{title}</AuthTitle>
+            <AuthHint>{hint}</AuthHint>
 
-          {mode !== 'unlock' && (
-            <Field
-              label="ИМЯ ПОЛЬЗОВАТЕЛЯ"
-              value={username}
-              onChangeText={setUsername}
-              autoCapitalize="none"
-              autoCorrect={false}
-              placeholder="alice"
-            />
-          )}
+            <View style={{ gap: space.md, marginTop: space.lg }}>
+              {mode !== 'unlock' && (
+                <Field
+                  label="Имя пользователя"
+                  value={username}
+                  onChangeText={setUsername}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  placeholder="alice"
+                />
+              )}
 
-          {mode === 'restore' && (
-            <Field
-              label="ФРАЗА ВОССТАНОВЛЕНИЯ"
-              value={mnemonic}
-              onChangeText={setMnemonic}
-              autoCapitalize="none"
-              autoCorrect={false}
-              multiline
-              placeholder="двенадцать слов через пробел"
-              style={{ minHeight: 90, textAlignVertical: 'top' }}
-            />
-          )}
+              {mode === 'restore' && (
+                <Field
+                  label="Фраза восстановления"
+                  value={mnemonic}
+                  onChangeText={setMnemonic}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  multiline
+                  placeholder="двенадцать слов через пробел"
+                  style={{ minHeight: 96, textAlignVertical: 'top' }}
+                />
+              )}
 
-          <Field
-            label="PIN"
-            value={pin}
-            onChangeText={setPin}
-            keyboardType="number-pad"
-            secureTextEntry
-            maxLength={12}
-            placeholder="••••••"
-          />
+              <Field
+                label="PIN"
+                value={pin}
+                onChangeText={setPin}
+                keyboardType="number-pad"
+                secureTextEntry
+                maxLength={12}
+                placeholder="••••••"
+              />
 
-          <ErrorText>{error}</ErrorText>
+              {error ? <ErrorText>{error}</ErrorText> : null}
 
-          {mode === 'unlock' && (
-            <Button
-              title="Открыть"
-              busy={busy}
-              onPress={() =>
-                run(async () => {
-                  const failure = await session.unlock(pin)
-                  if (failure) return failure
-                  router.replace('/chats')
-                  return null
-                })
-              }
-            />
-          )}
+              {mode === 'unlock' && (
+                <Pill
+                  title="Открыть"
+                  busy={busy}
+                  onPress={() =>
+                    run(async () => {
+                      const failure = await session.unlock(pin)
+                      if (failure) return failure
+                      router.replace('/chats')
+                      return null
+                    })
+                  }
+                />
+              )}
 
-          {mode === 'create' && (
-            <Button
-              title="Создать аккаунт"
-              busy={busy}
-              onPress={() =>
-                run(async () => {
-                  const res = await session.register(username, pin)
-                  if (!res.ok) return res.error
-                  // The phrase exists only at creation time — show it before routing on.
-                  setRecovery(res.mnemonic)
-                  return null
-                })
-              }
-            />
-          )}
+              {mode === 'create' && (
+                <Pill
+                  title="Создать аккаунт"
+                  busy={busy}
+                  onPress={() =>
+                    run(async () => {
+                      const res = await session.register(username, pin)
+                      if (!res.ok) return res.error
+                      // The phrase exists only at creation time — show it before routing on.
+                      setRecovery(res.mnemonic)
+                      return null
+                    })
+                  }
+                />
+              )}
 
-          {mode === 'restore' && (
-            <Button
-              title="Восстановить"
-              busy={busy}
-              onPress={() =>
-                run(async () => {
-                  const failure = await session.restore(mnemonic, username, pin)
-                  if (failure) return failure
-                  router.replace('/chats')
-                  return null
-                })
-              }
-            />
-          )}
+              {mode === 'restore' && (
+                <Pill
+                  title="Восстановить"
+                  busy={busy}
+                  onPress={() =>
+                    run(async () => {
+                      const failure = await session.restore(mnemonic, username, pin)
+                      if (failure) return failure
+                      router.replace('/chats')
+                      return null
+                    })
+                  }
+                />
+              )}
 
-          <View style={{ height: space.xs }} />
+              <OrDivider label="или" />
 
-          {mode === 'unlock' ? (
-            <Button variant="ghost" title="Восстановить по фразе" onPress={() => setMode('restore')} />
-          ) : mode === 'create' ? (
-            <Button variant="ghost" title="У меня уже есть фраза" onPress={() => setMode('restore')} />
-          ) : (
-            <Button
-              variant="ghost"
-              title={session.accountExists ? 'Назад ко входу' : 'Создать новый аккаунт'}
-              onPress={() => setMode(session.accountExists ? 'unlock' : 'create')}
-            />
-          )}
+              {mode === 'unlock' ? (
+                <Pill variant="secondary" title="Восстановить по фразе" onPress={() => setMode('restore')} />
+              ) : mode === 'create' ? (
+                <Pill variant="secondary" title="У меня уже есть фраза" onPress={() => setMode('restore')} />
+              ) : (
+                <Pill
+                  variant="secondary"
+                  title={session.accountExists ? 'Назад ко входу' : 'Создать новый аккаунт'}
+                  onPress={() => setMode(session.accountExists ? 'unlock' : 'create')}
+                />
+              )}
+            </View>
 
-          <Text style={{ fontSize: text.micro, color: p.textMuted, textAlign: 'center', marginTop: space.md }}>
-            Сервер видит только зашифрованные данные
-          </Text>
+            <Text style={{ fontSize: 13, color: p.textMuted, textAlign: 'center', marginTop: space.lg }}>
+              Сервер видит только зашифрованные данные
+            </Text>
+          </AuthHero>
         </ScrollView>
       </KeyboardAvoidingView>
     </Screen>
   )
+}
+
+const styles = {
+  shell: {
+    flexGrow: 1,
+    justifyContent: 'center' as const,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.xl,
+  },
 }

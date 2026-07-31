@@ -4,22 +4,19 @@
 import '../../src/polyfills'
 
 import { useRef, useState } from 'react'
-import {
-  FlatList,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  Text,
-  TextInput,
-  View,
-} from 'react-native'
+import { FlatList, KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View } from 'react-native'
 import { router, useLocalSearchParams } from 'expo-router'
 import { useSession } from '../../src/store/session'
-import { Avatar, ErrorText, OnlineDot, Screen, usePalette } from '../../src/ui/components'
-import { radius, space, text } from '../../src/ui/theme'
+import { Avatar, ErrorText, IconButton, OnlineDot, Screen, usePalette } from '../../src/ui/components'
+import { metrics, radius, space, text } from '../../src/ui/theme'
 import type { StoredMessage } from '../../src/vault'
 
-/** One conversation. Every bubble here was decrypted on this device. */
+/**
+ * One conversation. Bubbles follow the web's `.message-bubble-sent` /
+ * `.message-bubble-received`: asymmetric corners with the tail on the sender's
+ * side, and the composer is a transparent field with round icon buttons beside
+ * it — no boxed input.
+ */
 export default function Chat() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const session = useSession()
@@ -55,86 +52,53 @@ export default function Chat() {
           flexDirection: 'row',
           alignItems: 'center',
           gap: space.md,
-          paddingHorizontal: space.lg,
-          paddingTop: space.lg,
-          paddingBottom: space.md,
+          paddingHorizontal: space.md,
+          paddingVertical: space.sm,
           borderBottomWidth: 1,
           borderBottomColor: p.border,
         }}
       >
-        <Pressable onPress={() => router.back()} hitSlop={12}>
-          <Text style={{ fontSize: 24, color: p.textPrimary, lineHeight: 26 }}>‹</Text>
-        </Pressable>
-        <Avatar name={contact?.username ?? '?'} size={34} />
+        <IconButton glyph="‹" onPress={() => router.back()} emphasis="primary" />
+        <Avatar name={contact?.username ?? '?'} size={36} />
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: 15, fontWeight: '600', color: p.textPrimary }}>
             {contact?.username ?? 'Неизвестный'}
           </Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: 1 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 1 }}>
             <OnlineDot online={session.connection === 'connected'} />
-            <Text style={{ fontSize: text.micro, color: p.textMuted }}>сквозное шифрование</Text>
+            <Text style={{ fontSize: text.caption, color: p.textMuted }}>сквозное шифрование</Text>
           </View>
         </View>
       </View>
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-      >
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <FlatList
           ref={listRef}
           data={messages}
           keyExtractor={m => m.id}
-          contentContainerStyle={{ padding: space.lg, gap: space.sm, flexGrow: 1 }}
+          contentContainerStyle={{ paddingHorizontal: space.md, paddingVertical: space.lg, gap: 6, flexGrow: 1 }}
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
           ListEmptyComponent={
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.xl }}>
-              <Text style={{ fontSize: text.body, color: p.textMuted, textAlign: 'center' }}>
-                Сообщений пока нет. Первое отправленное сообщение установит защищённую сессию.
+              <Text style={{ fontSize: 14, color: p.textMuted, textAlign: 'center', lineHeight: 21 }}>
+                Сообщений пока нет. Первое установит защищённую сессию.
               </Text>
             </View>
           }
-          renderItem={({ item }) => (
-            <View
-              style={{
-                alignSelf: item.outgoing ? 'flex-end' : 'flex-start',
-                maxWidth: '82%',
-                backgroundColor: item.outgoing ? p.bubbleOut : p.bubbleIn,
-                borderColor: item.outgoing ? 'transparent' : p.border,
-                borderWidth: item.outgoing ? 0 : 1,
-                borderRadius: radius.md,
-                paddingHorizontal: space.md,
-                paddingVertical: space.sm,
-                gap: 2,
-              }}
-            >
-              <Text
-                style={{
-                  color: item.outgoing ? p.bubbleOutText : p.bubbleInText,
-                  fontSize: 15,
-                  lineHeight: 20,
-                }}
-              >
-                {item.text}
-              </Text>
-              <Text
-                style={{
-                  fontSize: text.micro,
-                  color: item.outgoing ? p.bubbleOutText : p.textMuted,
-                  opacity: item.outgoing ? 0.6 : 1,
-                  alignSelf: 'flex-end',
-                }}
-              >
-                {clock(item.timestamp)}
-              </Text>
-            </View>
-          )}
+          renderItem={({ item }) => <Bubble message={item} />}
         />
 
-        <View style={{ paddingHorizontal: space.lg, paddingBottom: space.lg, gap: space.sm }}>
-          <ErrorText>{error}</ErrorText>
-          <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: space.sm }}>
+        <View
+          style={{
+            borderTopWidth: 1,
+            borderTopColor: p.border,
+            paddingHorizontal: space.md,
+            paddingVertical: space.md,
+            gap: space.sm,
+          }}
+        >
+          {error ? <ErrorText>{error}</ErrorText> : null}
+          <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: space.md }}>
             <TextInput
               value={draft}
               onChangeText={setDraft}
@@ -144,29 +108,35 @@ export default function Chat() {
               style={{
                 flex: 1,
                 maxHeight: 120,
-                borderWidth: 1,
-                borderColor: p.border,
-                borderRadius: radius.md,
-                paddingHorizontal: space.md,
-                paddingVertical: space.sm + 2,
+                paddingHorizontal: space.sm,
+                paddingVertical: 10,
                 color: p.textPrimary,
-                backgroundColor: p.surface,
-                fontSize: 15,
+                fontSize: metrics.inputFontSize,
+                lineHeight: 21,
               }}
             />
             <Pressable
               onPress={send}
               disabled={sending || !draft.trim()}
-              style={{
-                width: 44,
-                height: 44,
+              style={({ pressed }) => ({
+                width: 40,
+                height: 40,
                 borderRadius: radius.pill,
                 alignItems: 'center',
                 justifyContent: 'center',
-                backgroundColor: draft.trim() && !sending ? p.accent : p.accentDisabled,
-              }}
+                backgroundColor: draft.trim() && !sending ? p.accent : 'transparent',
+                opacity: pressed ? 0.8 : 1,
+              })}
             >
-              <Text style={{ color: p.accentContrast, fontSize: 18, fontWeight: '700' }}>↑</Text>
+              <Text
+                style={{
+                  fontSize: 17,
+                  fontWeight: '700',
+                  color: draft.trim() && !sending ? p.accentContrast : p.textMuted,
+                }}
+              >
+                ↑
+              </Text>
             </Pressable>
           </View>
         </View>
@@ -175,7 +145,41 @@ export default function Chat() {
   )
 }
 
-function clock(ts: number) {
-  const d = new Date(ts)
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+function Bubble({ message }: { message: StoredMessage }) {
+  const p = usePalette()
+  const mine = message.outgoing
+  return (
+    <View style={{ flexDirection: 'row', justifyContent: mine ? 'flex-end' : 'flex-start' }}>
+      <View
+        style={{
+          maxWidth: '80%',
+          paddingHorizontal: metrics.bubblePaddingH,
+          paddingVertical: metrics.bubblePaddingV,
+          backgroundColor: mine ? p.accent : p.bubbleIn,
+          borderWidth: mine ? 0 : 1,
+          borderColor: p.border,
+          // The tail corner sits on the sender's side, as in the web CSS.
+          borderTopLeftRadius: metrics.bubbleRadius,
+          borderTopRightRadius: metrics.bubbleRadius,
+          borderBottomLeftRadius: mine ? metrics.bubbleRadius : metrics.bubbleTail,
+          borderBottomRightRadius: mine ? metrics.bubbleTail : metrics.bubbleRadius,
+        }}
+      >
+        <Text style={{ color: mine ? p.accentContrast : p.textPrimary, fontSize: 15, lineHeight: 21 }}>
+          {message.text}
+        </Text>
+        <Text
+          style={{
+            fontSize: text.caption,
+            color: mine ? p.accentContrast : p.textMuted,
+            opacity: mine ? 0.45 : 1,
+            alignSelf: 'flex-end',
+            marginTop: 3,
+          }}
+        >
+          {`${String(new Date(message.timestamp).getHours()).padStart(2, '0')}:${String(new Date(message.timestamp).getMinutes()).padStart(2, '0')}`}
+        </Text>
+      </View>
+    </View>
+  )
 }
