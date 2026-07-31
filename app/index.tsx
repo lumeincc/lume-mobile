@@ -32,10 +32,10 @@ export default function Index() {
     if (session.ready) setMode(session.accountExists ? 'unlock' : 'create')
   }, [session.ready, session.accountExists])
 
-  useEffect(() => {
-    // Nothing to show here once the vault is open.
-    if (session.unlocked && !recovery) router.replace('/chats')
-  }, [session.unlocked, recovery])
+  // Navigation is deliberately explicit per action rather than an effect on
+  // `unlocked`. Registration opens the session before the phrase reaches state,
+  // so an effect would route away first and the user would never see the only
+  // copy of their recovery phrase.
 
   async function run(action: () => Promise<string | null>) {
     setBusy(true)
@@ -142,7 +142,18 @@ export default function Index() {
           <ErrorText>{error}</ErrorText>
 
           {mode === 'unlock' && (
-            <Button title="Открыть" busy={busy} onPress={() => run(() => session.unlock(pin))} />
+            <Button
+              title="Открыть"
+              busy={busy}
+              onPress={() =>
+                run(async () => {
+                  const failure = await session.unlock(pin)
+                  if (failure) return failure
+                  router.replace('/chats')
+                  return null
+                })
+              }
+            />
           )}
 
           {mode === 'create' && (
@@ -165,7 +176,14 @@ export default function Index() {
             <Button
               title="Восстановить"
               busy={busy}
-              onPress={() => run(() => session.restore(mnemonic, username, pin))}
+              onPress={() =>
+                run(async () => {
+                  const failure = await session.restore(mnemonic, username, pin)
+                  if (failure) return failure
+                  router.replace('/chats')
+                  return null
+                })
+              }
             />
           )}
 
