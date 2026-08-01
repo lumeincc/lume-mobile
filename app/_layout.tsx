@@ -4,62 +4,46 @@
 // Polyfills FIRST — registers the native CSPRNG before any crypto is touched.
 import '../src/polyfills'
 
-import { useCallback } from 'react'
 import { Stack } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
-import { useColorScheme, View } from 'react-native'
+import { useColorScheme } from 'react-native'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
-import { useFonts } from 'expo-font'
-// Imported per weight rather than from the package root: the root index pulls in
-// every face it ships, and Metro cannot drop the ones we never ask for — three
-// unused weights, ~290 kB, would ride along in the APK.
-import { Manrope_400Regular } from '@expo-google-fonts/manrope/400Regular'
-import { Manrope_500Medium } from '@expo-google-fonts/manrope/500Medium'
-import { Manrope_600SemiBold } from '@expo-google-fonts/manrope/600SemiBold'
-import { Manrope_700Bold } from '@expo-google-fonts/manrope/700Bold'
-import * as SplashScreen from 'expo-splash-screen'
 import { SessionProvider } from '../src/store/session'
 import { dark, light } from '../src/ui/theme'
 
-// Hold the splash until the typeface is ready. Without it the first frames draw
-// in Android's Roboto and then reflow into Manrope — every label changes width
-// mid-launch, which reads as a broken app rather than a slow one.
-void SplashScreen.preventAutoHideAsync()
-
+/**
+ * Fonts are embedded at build time by the `expo-font` config plugin (see
+ * app.json), not loaded here at runtime.
+ *
+ * `useFonts` was the first attempt and it failed silently on device: it resolves
+ * the bundled .ttf through expo-asset, which needs expo-file-system linked, and
+ * this project does not have it — `ExpoAsset.downloadAsync` was rejected with
+ * "Module 'expo.modules.interfaces.filesystem.AppDirectories' not found". The
+ * app then fell back to the system face and looked exactly as it had before,
+ * with nothing in the log to say why.
+ *
+ * Embedding is the better answer regardless: the typeface is registered by
+ * Android before any JavaScript runs, so there is no load to await, no splash to
+ * hold, and no failure mode. The registered family name is the file's stem —
+ * `Manrope_600SemiBold` — which is what theme.ts#fontFor returns.
+ */
 export default function RootLayout() {
   const scheme = useColorScheme()
   const palette = scheme === 'dark' ? dark : light
 
-  const [fontsLoaded, fontError] = useFonts({
-    Manrope_400Regular,
-    Manrope_500Medium,
-    Manrope_600SemiBold,
-    Manrope_700Bold,
-  })
-
-  const onReady = useCallback(() => {
-    void SplashScreen.hideAsync()
-  }, [])
-
-  // A font that fails to load must not leave a blank app: fall back to the
-  // system face and carry on. Nothing here depends on the typeface working.
-  if (!fontsLoaded && !fontError) return null
-
   return (
     <SafeAreaProvider>
-      <View style={{ flex: 1, backgroundColor: palette.background }} onLayout={onReady}>
-        <SessionProvider>
-          <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-          {/* Screens draw their own headers, so the navigator stays out of the way. */}
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: palette.background },
-              animation: 'slide_from_right',
-            }}
-          />
-        </SessionProvider>
-      </View>
+      <SessionProvider>
+        <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+        {/* Screens draw their own headers, so the navigator stays out of the way. */}
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: palette.background },
+            animation: 'slide_from_right',
+          }}
+        />
+      </SessionProvider>
     </SafeAreaProvider>
   )
 }
