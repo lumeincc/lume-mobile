@@ -295,6 +295,16 @@ export async function loadRatchetSessions(
   return parsed as RatchetSessions
 }
 
+/**
+ * How many messages this device keeps.
+ *
+ * The whole list is sealed as a single blob, so its size is the cost of every
+ * save and of every unlock. Left unbounded it grows until both are slow and the
+ * record no longer fits comfortably in memory — the same reasoning behind the
+ * relay's own retention caps. The oldest messages are dropped first.
+ */
+export const MAX_STORED_MESSAGES = 5_000
+
 /** A decrypted message, held only on this device. */
 export interface StoredMessage {
   id: string
@@ -303,6 +313,16 @@ export interface StoredMessage {
   outgoing: boolean
   text: string
   timestamp: number
+  /**
+   * Delivery state for outgoing messages. Absent on messages written before the
+   * outbox existed and on every received message, both of which are settled by
+   * definition — so treat a missing value as 'sent'.
+   */
+  status?: 'pending' | 'sent' | 'failed'
+  /** Why delivery failed, kept so the UI can explain rather than just mark it. */
+  error?: string
+  /** The relay's id, once it accepted the message. */
+  serverId?: string
 }
 
 export async function saveMessages(
@@ -310,7 +330,9 @@ export async function saveMessages(
   messages: StoredMessage[],
   masterKey: Uint8Array
 ): Promise<void> {
-  await platform.kv.set(VAULT_KEYS.CHATS, encryptWithKey(JSON.stringify(messages), masterKey))
+  const capped =
+    messages.length > MAX_STORED_MESSAGES ? messages.slice(-MAX_STORED_MESSAGES) : messages
+  await platform.kv.set(VAULT_KEYS.CHATS, encryptWithKey(JSON.stringify(capped), masterKey))
 }
 
 export async function loadMessages(

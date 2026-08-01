@@ -25,10 +25,22 @@ export interface WirePayload {
   selfDestruct?: number | null
   /** Present on group fan-out; the relay never sees it. */
   groupId?: string
+  /**
+   * Sender-generated id, stable across retries of the same message.
+   *
+   * A send that times out is ambiguous: the relay may well have stored the
+   * message and only the response was lost. The retry therefore has to happen,
+   * and it produces a second, perfectly valid ciphertext — the recipient would
+   * show the text twice. Carrying the id inside the sealed payload lets the
+   * recipient recognise the repeat; the relay cannot see it, so it learns nothing
+   * new. Optional in both directions: older senders omit it, and the web ignores
+   * fields it does not know.
+   */
+  clientId?: string
 }
 
-export function encodeWirePayload(content: string, timestamp: number): string {
-  return JSON.stringify({ content, timestamp })
+export function encodeWirePayload(content: string, timestamp: number, clientId?: string): string {
+  return JSON.stringify({ content, timestamp, ...(clientId ? { clientId } : {}) })
 }
 
 /** Fails closed: anything that is not a readable payload returns null. */
@@ -49,5 +61,6 @@ export function decodeWirePayload(raw: string): WirePayload | null {
     timestamp: typeof record.timestamp === 'number' ? record.timestamp : Date.now(),
     selfDestruct: typeof record.selfDestruct === 'number' ? record.selfDestruct : null,
     ...(typeof record.groupId === 'string' ? { groupId: record.groupId } : {}),
+    ...(typeof record.clientId === 'string' ? { clientId: record.clientId } : {}),
   }
 }

@@ -32,16 +32,20 @@ export default function Chats() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // `messagesWith` is an index lookup. Scanning the whole message list per
+  // contact instead made this contacts × messages on every keystroke and on every
+  // message that arrived — the kind of cost a cheap phone shows and a laptop hides.
+  const messagesWith = session.messagesWith
   const rows = useMemo(() => {
     const needle = query.trim().toLowerCase()
     return session.contacts
       .filter(c => !needle || c.username.toLowerCase().includes(needle))
       .map(contact => {
-        const thread = session.messages.filter(m => m.contactId === contact.id)
-        return { contact, last: thread.length ? thread[thread.length - 1] : null }
+        const thread = messagesWith(contact.id)
+        return { contact, last: thread.length ? thread[thread.length - 1]! : null }
       })
       .sort((a, b) => (b.last?.timestamp ?? 0) - (a.last?.timestamp ?? 0))
-  }, [session.contacts, session.messages, query])
+  }, [session.contacts, messagesWith, query])
 
   async function add() {
     setBusy(true)

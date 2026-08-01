@@ -30,6 +30,11 @@ export default function Chat() {
   const contact = session.contacts.find(c => c.id === id)
   const messages = session.messagesWith(id ?? '')
 
+  /**
+   * Hands the message to the outbox, which owns delivery from here — so the
+   * composer clears as soon as the message is durably queued rather than waiting
+   * on the network. Whether it actually arrived is shown on the bubble itself.
+   */
   async function send() {
     const body = draft.trim()
     if (!body || !id) return
@@ -78,6 +83,11 @@ export default function Chat() {
           keyExtractor={m => m.id}
           contentContainerStyle={{ paddingHorizontal: space.md, paddingVertical: space.lg, gap: 6, flexGrow: 1 }}
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+          // A long history must not be mounted in one go: the list opens at the
+          // bottom, so everything above it can be rendered as the user scrolls.
+          initialNumToRender={20}
+          maxToRenderPerBatch={20}
+          windowSize={11}
           ListEmptyComponent={
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.xl }}>
               <Text style={{ fontSize: 14, color: p.textMuted, textAlign: 'center', lineHeight: 21 }}>
@@ -85,7 +95,7 @@ export default function Chat() {
               </Text>
             </View>
           }
-          renderItem={({ item }) => <Bubble message={item} />}
+          renderItem={({ item }) => <Bubble message={item} onRetry={() => session.retry(item.id)} />}
         />
 
         <View
@@ -145,9 +155,11 @@ export default function Chat() {
   )
 }
 
-function Bubble({ message }: { message: StoredMessage }) {
+function Bubble({ message, onRetry }: { message: StoredMessage; onRetry: () => void }) {
   const p = usePalette()
   const mine = message.outgoing
+  // Absent on received messages and on anything written before the outbox existed.
+  const status = mine ? (message.status ?? 'sent') : null
   return (
     <View style={{ flexDirection: 'row', justifyContent: mine ? 'flex-end' : 'flex-start' }}>
       <View
@@ -156,6 +168,9 @@ function Bubble({ message }: { message: StoredMessage }) {
           paddingHorizontal: metrics.bubblePaddingH,
           paddingVertical: metrics.bubblePaddingV,
           backgroundColor: mine ? p.accent : p.bubbleIn,
+          // A message still on its way is dimmed rather than badged: it is the
+          // quietest way to say "not there yet" without decorating the screen.
+          opacity: status === 'pending' ? 0.55 : 1,
           borderWidth: mine ? 0 : 1,
           borderColor: p.border,
           // The tail corner sits on the sender's side, as in the web CSS.
@@ -180,6 +195,14 @@ function Bubble({ message }: { message: StoredMessage }) {
           {`${String(new Date(message.timestamp).getHours()).padStart(2, '0')}:${String(new Date(message.timestamp).getMinutes()).padStart(2, '0')}`}
         </Text>
       </View>
+
+      {status === 'failed' ? (
+        <Pressable onPress={onRetry} hitSlop={8} style={{ alignSelf: 'flex-end', paddingLeft: 8, paddingBottom: 4 }}>
+          <Text style={{ fontSize: text.caption, color: p.danger, fontWeight: '600' }}>
+            не отправлено · повторить
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   )
 }

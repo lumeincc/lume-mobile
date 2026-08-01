@@ -25,6 +25,10 @@
  * client only uses that module in its own tests, and wrapping messages in its
  * extra nacl-box layer is what made every message from this client render as
  * "[Unable to decrypt message]" on the web.
+ *
+ * Both entry points are serialised per contact (lib/serialQueue.ts). Read the
+ * reasoning there before removing it: the ratchet is a read-advance-write state
+ * machine, and on a phone these calls genuinely overlap.
  */
 
 import { decodeBase64 } from 'tweetnacl-util'
@@ -52,6 +56,7 @@ import { findOneTimePreKey, deleteOneTimePreKey, loadPreKeyMaterial } from './cr
 import { selectRespondSpk } from './crypto/spkRotation'
 import { encodeRatchetEnvelope, parseRatchetEnvelope } from './lib/ratchetPayload'
 import { encodeWirePayload, decodeWirePayload } from './lib/wirePayload'
+import { ratchetQueue } from './lib/serialQueue'
 import {
   bundleMatchesTrustedIdentity,
   inboundSenderMatchesTrustedIdentity,
@@ -69,12 +74,30 @@ export interface SendTarget {
   exchangeKey?: string
 }
 
-export type SendResult = { ok: true; messageId: string } | { ok: false; error: string }
+export type SendResult =
+  | { ok: true; messageId: string }
+  /**
+   * `retryable` separates "the network was in the way" from "this must not be
+   * sent". A failed signature check or an identity that does not match the pinned
+   * contact are refusals, and retrying them would turn a visible security stop
+   * into a silent loop; everything transport-level is worth another attempt.
+   */
+  | { ok: false; error: string; retryable: boolean }
 
-export async function sendMessage(
+export function sendMessage(
   senderId: string,
   target: SendTarget,
-  text: string
+  text: string,
+  clientId?: string
+): Promise<SendResult> {
+  return ratchetQueue.run(target.id, () => sendMessageExclusive(senderId, target, text, clientId))
+}
+
+async function sendMessageExclusive(
+  senderId: string,
+  target: SendTarget,
+  text: string,
+  clientId?: string
 ): Promise<SendResult> {
   const timestamp = Date.now()
 
@@ -91,8 +114,15 @@ export async function sendMessage(
     | undefined
 
   if (!session || !recipientExchangeKey) {
-    const { data: bundle, error: bundleError } = await authApi.getBundle(target.username)
-    if (bundleError || !bundle) return { ok: false, error: bundleError ?? 'Failed to fetch bundle' }
+    const bundleResponse = await authApi.getBundle(target.username)
+    const bundle = bundleResponse.data
+    if (bundleResponse.error || !bundle) {
+      return {
+        ok: false,
+        error: bundleResponse.error ?? 'Failed to fetch bundle',
+        retryable: bundleResponse.retryable ?? false,
+      }
+    }
 
     // The signature proves the bundle is internally consistent...
     const signatureOk = verify(
@@ -100,10 +130,14 @@ export async function sendMessage(
       decodeBase64(bundle.signedPrekeySignature),
       bundle.identityKey
     )
-    if (!signatureOk) return { ok: false, error: 'Invalid signed prekey signature' }
+    if (!signatureOk) {
+      return { ok: false, error: 'Invalid signed prekey signature', retryable: false }
+    }
 
     const recipientIk = bundle.exchangeIdentityKey || bundle.exchangeKey
-    if (!recipientIk) return { ok: false, error: 'Recipient bundle missing exchange identity key' }
+    if (!recipientIk) {
+      return { ok: false, error: 'Recipient bundle missing exchange identity key', retryable: false }
+    }
 
     // ...but only pinning proves it is the identity we already trust, which is
     // what a malicious relay cannot forge.
@@ -111,6 +145,7 @@ export async function sendMessage(
       return {
         ok: false,
         error: 'Recipient identity does not match the trusted contact (possible MITM)',
+        retryable: false,
       }
     }
     recipientExchangeKey = recipientIk
@@ -136,14 +171,17 @@ export async function sendMessage(
     }
   }
 
-  const encrypted = ratchetEncrypt(session, new TextEncoder().encode(encodeWirePayload(text, timestamp)))
+  const encrypted = ratchetEncrypt(
+    session,
+    new TextEncoder().encode(encodeWirePayload(text, timestamp, clientId))
+  )
   const encryptedPayload = encodeRatchetEnvelope({
     encrypted,
     timestamp,
     ...(x3dhInit ? { x3dh: x3dhInit } : {}),
   })
 
-  const { data, error } = await messagesApi.send({
+  const { data, error, retryable } = await messagesApi.send({
     senderId,
     recipientId: target.id,
     encryptedPayload,
@@ -155,7 +193,7 @@ export async function sendMessage(
     // already-established session keeps its advance, so an ambiguous transport
     // failure cannot lead to reusing a message key.
     if (existing) vaultUpsertSession(target.id, serializeSession(session))
-    return { ok: false, error: error ?? 'Send failed' }
+    return { ok: false, error: error ?? 'Send failed', retryable: retryable ?? false }
   }
 
   vaultUpsertSession(target.id, serializeSession(session))
@@ -169,10 +207,17 @@ export interface IncomingMessage {
 }
 
 export type ReceiveResult =
-  | { ok: true; text: string; timestamp: number }
+  | { ok: true; text: string; timestamp: number; clientId?: string }
   | { ok: false; error: string }
 
-export async function receiveMessage(
+export function receiveMessage(
+  message: IncomingMessage,
+  trusted?: TrustedIdentity | null
+): Promise<ReceiveResult> {
+  return ratchetQueue.run(message.senderId, () => receiveMessageExclusive(message, trusted))
+}
+
+async function receiveMessageExclusive(
   message: IncomingMessage,
   trusted?: TrustedIdentity | null
 ): Promise<ReceiveResult> {
@@ -238,5 +283,10 @@ export async function receiveMessage(
     await deleteOneTimePreKey(consumedOpkPublicKey, vaultGetMasterKey())
   }
 
-  return { ok: true, text: decoded.content, timestamp: decoded.timestamp }
+  return {
+    ok: true,
+    text: decoded.content,
+    timestamp: decoded.timestamp,
+    ...(decoded.clientId ? { clientId: decoded.clientId } : {}),
+  }
 }

@@ -39,17 +39,34 @@ import { API_URL, APP_ORIGIN } from './config';
 
 interface ApiResponse<T = unknown> {
     data?: T;
+    /** True when the failure was transport-level, so a retry can make sense. */
+    retryable?: boolean;
     error?: string;
 }
+
+/**
+ * Mobile port: every request is bounded.
+ *
+ * React Native's fetch has no default timeout, and a phone that loses signal
+ * mid-request does not get a connection error — the socket simply never answers.
+ * Without this, sending a message on a dying connection leaves the UI spinning
+ * with no outcome at all, which is the worst of the three possible endings.
+ * Render's free tier also cold-starts, hence a timeout in tens of seconds rather
+ * than the few one would pick for a warm server.
+ */
+const REQUEST_TIMEOUT_MS = 30_000;
 
 async function request<T>(
     endpoint: string,
     options: RequestInit = {},
     schema?: ZodType<T>
 ): Promise<ApiResponse<T>> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
         const response = await fetch(`${API_URL}${endpoint}`, {
             ...options,
+            signal: controller.signal,
             headers: {
                 'Content-Type': 'application/json',
                 // Mobile port: browsers attach Origin automatically and the relay
@@ -62,7 +79,9 @@ async function request<T>(
         });
 
         if (response.status === 429) {
-            return { error: 'Too many requests. Please try again later.' };
+            // Rate limiting is temporary by definition, so a backed-off retry is
+            // the right response — unlike a 4xx, which would only repeat.
+            return { error: 'Too many requests. Please try again later.', retryable: true };
         }
 
         let data;
@@ -86,7 +105,12 @@ async function request<T>(
         }
 
         if (!response.ok) {
-            return { error: data.error || `Request failed: ${response.status}` };
+            return {
+                error: data.error || `Request failed: ${response.status}`,
+                // 5xx is the server having a bad moment, not the request being
+                // wrong; a 4xx would fail identically however many times we ask.
+                retryable: response.status >= 500,
+            };
         }
 
         // Validate the server response shape before use (fail closed). SEC-20260621-007.
@@ -107,8 +131,18 @@ async function request<T>(
 
         return { data };
     } catch (error) {
-        console.error('API request failed:', error);
-        return { error: 'Network error' };
+        // Never log the request body — it may carry a sealed payload, and the
+        // endpoint alone is enough to place the failure.
+        const timedOut = error instanceof Error && error.name === 'AbortError';
+        if (process.env.NODE_ENV !== 'production') {
+            console.warn('API request failed:', endpoint, timedOut ? 'timeout' : 'network');
+        }
+        return {
+            error: timedOut ? 'Сервер не ответил вовремя' : 'Нет соединения',
+            retryable: true,
+        };
+    } finally {
+        clearTimeout(timer);
     }
 }
 

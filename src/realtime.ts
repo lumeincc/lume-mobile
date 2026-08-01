@@ -263,6 +263,25 @@ export class RealtimeClient {
     this.pingTimer = null
   }
 
+  /**
+   * Reconnect now, from a clean attempt budget.
+   *
+   * On a phone the backoff runs out for a mundane reason — a tunnel, a lift, a
+   * few minutes with the screen off — and once the ten attempts were spent the
+   * app stayed offline until it was restarted by hand. Coming back to the
+   * foreground, or the OS reporting a network again, is far better evidence that
+   * connecting will work than any timer, so both reset the count and retry at
+   * once. An auth failure is deliberately still not retried here: the token, not
+   * the network, is what has to change.
+   */
+  resume(): void {
+    if (!this.token || this.manuallyClosed) return
+    if (this.isConnected) return
+    this.reconnectAttempts = 0
+    this.clearReconnectTimer()
+    this.connect(this.token)
+  }
+
   private scheduleReconnect(forcedDelay?: number): void {
     if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
       this.setStatus('disconnected')
