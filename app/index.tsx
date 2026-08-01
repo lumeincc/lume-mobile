@@ -6,10 +6,11 @@
 import '../src/polyfills'
 
 import { useEffect, useState } from 'react'
-import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native'
+import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native'
 import { router } from 'expo-router'
 import { useSession } from '../src/store/session'
 import {
+  AuthFoot,
   AuthHero,
   AuthHint,
   AuthTitle,
@@ -18,6 +19,7 @@ import {
   OrDivider,
   Pill,
   Screen,
+  Txt,
   usePalette,
 } from '../src/ui/components'
 import { metrics, radius, space } from '../src/ui/theme'
@@ -82,9 +84,9 @@ export default function Index() {
                 marginTop: space.xs,
               }}
             >
-              <Text style={{ color: p.textPrimary, fontSize: 16, lineHeight: 27, letterSpacing: 0.2 }}>
+              <Txt style={{ color: p.textPrimary, fontSize: 16, lineHeight: 27, letterSpacing: 0.2 }}>
                 {recovery}
-              </Text>
+              </Txt>
             </View>
             <Pill
               title="Я записал фразу"
@@ -99,32 +101,18 @@ export default function Index() {
     )
   }
 
-  const title = mode === 'unlock' ? 'С возвращением' : mode === 'create' ? 'Добро пожаловать' : 'Восстановление'
-  const hint =
-    mode === 'unlock'
-      ? 'Введите PIN, чтобы открыть хранилище на этом устройстве.'
-      : mode === 'create'
-        ? 'Публикуется только открытый ключ. Всё остальное остаётся здесь.'
-        : 'Введите фразу из 12 слов и задайте новый PIN.'
+  // Titles only. The web's auth screens carry a title, the fields and the
+  // buttons — no strapline under the heading, no wordmark, no slogan at the
+  // bottom. Each of those was added here and each one is why the screen read as
+  // a different product.
+  const title = mode === 'unlock' ? 'С возвращением' : mode === 'create' ? 'Создание аккаунта' : 'Восстановление доступа'
 
   return (
     <Screen>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.shell} keyboardShouldPersistTaps="handled">
           <AuthHero>
-            <Text
-              style={{
-                textAlign: 'center',
-                fontSize: 13,
-                letterSpacing: 3,
-                color: p.textMuted,
-                marginBottom: space.sm,
-              }}
-            >
-              LUME
-            </Text>
             <AuthTitle>{title}</AuthTitle>
-            <AuthHint>{hint}</AuthHint>
 
             <View style={{ gap: space.md, marginTop: space.lg }}>
               {mode !== 'unlock' && (
@@ -209,24 +197,32 @@ export default function Index() {
                 />
               )}
 
-              <OrDivider label="или" />
+              {mode !== 'restore' && (
+                <>
+                  <OrDivider label="или" />
+                  <Pill variant="secondary" title="Восстановить по фразе" onPress={() => setMode('restore')} />
+                </>
+              )}
+            </View>
 
+            {/* `.auth-foot`: the way out of this screen, as on the web. */}
+            <View style={{ marginTop: space.xl }}>
               {mode === 'unlock' ? (
-                <Pill variant="secondary" title="Восстановить по фразе" onPress={() => setMode('restore')} />
+                <AuthFoot label="Ещё нет аккаунта?" action="Создать" onPress={() => setMode('create')} />
               ) : mode === 'create' ? (
-                <Pill variant="secondary" title="У меня уже есть фраза" onPress={() => setMode('restore')} />
+                <AuthFoot
+                  label="Уже есть аккаунт?"
+                  action="Войти"
+                  onPress={() => setMode(session.accountExists ? 'unlock' : 'restore')}
+                />
               ) : (
-                <Pill
-                  variant="secondary"
-                  title={session.accountExists ? 'Назад ко входу' : 'Создать новый аккаунт'}
+                <AuthFoot
+                  label="Передумали?"
+                  action="Назад"
                   onPress={() => setMode(session.accountExists ? 'unlock' : 'create')}
                 />
               )}
             </View>
-
-            <Text style={{ fontSize: 13, color: p.textMuted, textAlign: 'center', marginTop: space.lg }}>
-              Сервер видит только зашифрованные данные
-            </Text>
           </AuthHero>
         </ScrollView>
       </KeyboardAvoidingView>

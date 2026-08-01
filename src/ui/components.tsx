@@ -12,18 +12,44 @@ import type { ReactNode } from 'react'
 import {
   ActivityIndicator,
   Pressable,
+  StyleSheet,
   Text,
   TextInput,
   View,
   useColorScheme,
   type TextInputProps,
+  type TextProps,
+  type TextStyle,
   type ViewStyle,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { dark, light, metrics, radius, space, text, type Palette } from './theme'
+import { dark, light, fontFor, metrics, radius, space, text, type FontWeight, type Palette } from './theme'
 
 export function usePalette(): Palette {
   return useColorScheme() === 'dark' ? dark : light
+}
+
+/**
+ * Text in the product's typeface.
+ *
+ * Use this instead of React Native's `Text` everywhere. RN does not synthesise
+ * weights from a single family the way a browser does — asking for
+ * `fontWeight: '600'` on the regular face makes Android fake the bold, which is
+ * visibly wrong next to real Manrope SemiBold. So the weight is read off the
+ * style, translated to the family that actually carries it, and removed.
+ *
+ * Callers keep writing `fontWeight: '600'` as they would on the web; this is the
+ * one place that knows the translation.
+ */
+export function Txt({ style, ...rest }: TextProps) {
+  const flat = (StyleSheet.flatten(style) ?? {}) as TextStyle
+  const { fontWeight, ...withoutWeight } = flat
+  return (
+    <Text
+      {...rest}
+      style={[withoutWeight, { fontFamily: fontFor((fontWeight as FontWeight) ?? '400') }]}
+    />
+  )
 }
 
 /** Screen root; owns the safe-area insets so no screen repeats them. */
@@ -55,18 +81,18 @@ export function AuthHero({ children }: { children: ReactNode }) {
 export function AuthTitle({ children }: { children: ReactNode }) {
   const p = usePalette()
   return (
-    <Text
+    <Txt
       style={{
         textAlign: 'center',
         fontSize: metrics.authTitleSize,
         fontWeight: '700',
         letterSpacing: metrics.authTitleSpacing,
-        lineHeight: metrics.authTitleSize * 1.1,
+        lineHeight: metrics.authTitleLineHeight,
         color: p.textPrimary,
       }}
     >
       {children}
-    </Text>
+    </Txt>
   )
 }
 
@@ -74,7 +100,7 @@ export function AuthTitle({ children }: { children: ReactNode }) {
 export function AuthHint({ children }: { children: ReactNode }) {
   const p = usePalette()
   return (
-    <Text
+    <Txt
       style={{
         textAlign: 'center',
         fontSize: metrics.authHintSize,
@@ -83,7 +109,7 @@ export function AuthHint({ children }: { children: ReactNode }) {
       }}
     >
       {children}
-    </Text>
+    </Txt>
   )
 }
 
@@ -94,7 +120,7 @@ export function Field(props: TextInputProps & { label?: string }) {
   return (
     <View>
       {label ? (
-        <Text
+        <Txt
           style={{
             fontSize: metrics.labelSize,
             fontWeight: '600',
@@ -103,7 +129,7 @@ export function Field(props: TextInputProps & { label?: string }) {
           }}
         >
           {label}
-        </Text>
+        </Txt>
       ) : null}
       <TextInput
         placeholderTextColor={p.textMuted}
@@ -118,6 +144,7 @@ export function Field(props: TextInputProps & { label?: string }) {
             paddingVertical: metrics.inputPaddingV,
             paddingHorizontal: metrics.inputPaddingH,
             fontSize: metrics.inputFontSize,
+            fontFamily: fontFor('400'),
             color: p.textPrimary,
           },
           style,
@@ -165,7 +192,7 @@ export function Pill({
       {busy ? (
         <ActivityIndicator color={primary ? p.accentContrast : p.textPrimary} />
       ) : (
-        <Text
+        <Txt
           style={{
             fontSize: metrics.pillFontSize,
             fontWeight: primary ? '600' : '500',
@@ -174,9 +201,37 @@ export function Pill({
           }}
         >
           {title}
-        </Text>
+        </Txt>
       )}
     </Pressable>
+  )
+}
+
+/**
+ * `.auth-foot` — one muted line closing the screen, with an underlined link.
+ *
+ * The web ends every auth screen this way ("New here? Create account"). This app
+ * had a slogan there instead, which is one of the invented elements that made
+ * the screens read as a different product.
+ */
+export function AuthFoot({ label, action, onPress }: { label: string; action: string; onPress: () => void }) {
+  const p = usePalette()
+  return (
+    <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 4 }}>
+      <Txt style={{ fontSize: 13, color: p.textMuted }}>{label}</Txt>
+      <Pressable onPress={onPress} hitSlop={12}>
+        <Txt
+          style={{
+            fontSize: 13,
+            fontWeight: '600',
+            color: p.textPrimary,
+            textDecorationLine: 'underline',
+          }}
+        >
+          {action}
+        </Txt>
+      </Pressable>
+    </View>
   )
 }
 
@@ -186,7 +241,7 @@ export function OrDivider({ label }: { label: string }) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
       <View style={{ flex: 1, height: 1, backgroundColor: p.border }} />
-      <Text style={{ fontSize: 12, color: p.textMuted }}>{label}</Text>
+      <Txt style={{ fontSize: 12, color: p.textMuted }}>{label}</Txt>
       <View style={{ flex: 1, height: 1, backgroundColor: p.border }} />
     </View>
   )
@@ -196,7 +251,7 @@ export function ErrorText({ children }: { children: ReactNode }) {
   const p = usePalette()
   if (!children) return null
   return (
-    <Text style={{ color: p.textSecondary, fontSize: 14, textAlign: 'center' }}>{children}</Text>
+    <Txt style={{ color: p.textSecondary, fontSize: 14, textAlign: 'center' }}>{children}</Txt>
   )
 }
 
@@ -222,9 +277,9 @@ export function Avatar({ name, size = 40 }: { name: string; size?: number }) {
         justifyContent: 'center',
       }}
     >
-      <Text style={{ color: p.textSecondary, fontWeight: '600', fontSize: size * 0.36 }}>
+      <Txt style={{ color: p.textSecondary, fontWeight: '600', fontSize: size * 0.36 }}>
         {name.slice(0, 1).toUpperCase()}
-      </Text>
+      </Txt>
     </View>
   )
 }
@@ -255,9 +310,9 @@ export function IconButton({
         backgroundColor: pressed ? p.surfaceAlt : 'transparent',
       })}
     >
-      <Text style={{ fontSize: size * 0.5, lineHeight: size * 0.62, color: emphasis === 'primary' ? p.textPrimary : p.textMuted }}>
+      <Txt style={{ fontSize: size * 0.5, lineHeight: size * 0.62, color: emphasis === 'primary' ? p.textPrimary : p.textMuted }}>
         {glyph}
-      </Text>
+      </Txt>
     </Pressable>
   )
 }

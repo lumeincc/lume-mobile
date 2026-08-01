@@ -19,7 +19,8 @@
           }
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-font"
     ],
     "android": {
       "package": "app.lume.mobile"

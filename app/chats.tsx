@@ -4,7 +4,7 @@
 import '../src/polyfills'
 
 import { useMemo, useState } from 'react'
-import { FlatList, Modal, Pressable, Text, TextInput, View } from 'react-native'
+import { FlatList, Modal, Pressable, TextInput, View } from 'react-native'
 import { router } from 'expo-router'
 import { useSession } from '../src/store/session'
 import {
@@ -15,9 +15,10 @@ import {
   OnlineDot,
   Pill,
   Screen,
+  Txt,
   usePalette,
 } from '../src/ui/components'
-import { metrics, radius, space, text } from '../src/ui/theme'
+import { fontFor, metrics, radius, space, text } from '../src/ui/theme'
 
 /**
  * Conversation list, laid out like the web's ChatListPanel: a borderless search
@@ -65,17 +66,17 @@ export default function Chats() {
       <View style={{ paddingHorizontal: space.lg, paddingTop: space.md, paddingBottom: space.sm }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 19, fontWeight: '700', color: p.textPrimary, letterSpacing: -0.2 }}>
+            <Txt style={{ fontSize: 19, fontWeight: '700', color: p.textPrimary, letterSpacing: -0.2 }}>
               Чаты
-            </Text>
+            </Txt>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
               <OnlineDot online={session.connection === 'connected'} />
-              <Text style={{ fontSize: text.caption, color: p.textMuted }}>
+              <Txt style={{ fontSize: text.caption, color: p.textMuted }}>
                 {session.profile ? `@${session.profile.username}` : ''}
                 {session.connection === 'connected'
                   ? ''
                   : ` · ${connectionLabel(session.connection)}${session.connectionDetail ? ` (${session.connectionDetail})` : ''}`}
-              </Text>
+              </Txt>
             </View>
           </View>
           <IconButton glyph="＋" onPress={() => setAdding(true)} emphasis="primary" />
@@ -88,7 +89,12 @@ export default function Chats() {
             onChangeText={setQuery}
             placeholder="Поиск"
             placeholderTextColor={p.textMuted}
-            style={{ paddingVertical: space.sm, fontSize: 14, color: p.textPrimary }}
+            style={{
+              paddingVertical: space.sm,
+              fontSize: 14,
+              fontFamily: fontFor('400'),
+              color: p.textPrimary,
+            }}
           />
         </View>
       </View>
@@ -99,9 +105,9 @@ export default function Chats() {
         contentContainerStyle={rows.length ? undefined : { flexGrow: 1, justifyContent: 'center' }}
         ListEmptyComponent={
           <View style={{ paddingHorizontal: space.xl }}>
-            <Text style={{ fontSize: 14, color: p.textMuted, textAlign: 'center', lineHeight: 21 }}>
+            <Txt style={{ fontSize: 14, color: p.textMuted, textAlign: 'center', lineHeight: 21 }}>
               {query ? 'Ничего не найдено' : 'Пока пусто. Добавьте собеседника по имени пользователя.'}
-            </Text>
+            </Txt>
           </View>
         }
         renderItem={({ item }) => (
@@ -121,18 +127,18 @@ export default function Chats() {
           >
             <Avatar name={item.contact.username} />
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text
+              <Txt
                 numberOfLines={1}
                 style={{ fontSize: text.body, fontWeight: '600', color: p.textPrimary }}
               >
                 {item.contact.username}
-              </Text>
-              <Text numberOfLines={1} style={{ fontSize: 12, color: p.textSecondary, marginTop: 2 }}>
+              </Txt>
+              <Txt numberOfLines={1} style={{ fontSize: 12, color: p.textSecondary, marginTop: 2 }}>
                 {item.last ? (item.last.outgoing ? `Вы: ${item.last.text}` : item.last.text) : 'Нет сообщений'}
-              </Text>
+              </Txt>
             </View>
             {item.last ? (
-              <Text style={{ fontSize: text.caption, color: p.textMuted }}>{formatTime(item.last.timestamp)}</Text>
+              <Txt style={{ fontSize: text.caption, color: p.textMuted }}>{formatTime(item.last.timestamp)}</Txt>
             ) : null}
           </Pressable>
         )}
@@ -150,7 +156,7 @@ export default function Chats() {
               gap: space.md,
             }}
           >
-            <Text style={{ fontSize: 17, fontWeight: '700', color: p.textPrimary }}>Новый чат</Text>
+            <Txt style={{ fontSize: 17, fontWeight: '700', color: p.textPrimary }}>Новый чат</Txt>
             <Field
               label="Имя пользователя"
               value={username}

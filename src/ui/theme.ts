@@ -67,6 +67,46 @@ export const dark: Palette = {
   bubbleIn: '#262626',
 }
 
+/**
+ * Typeface.
+ *
+ * The web serves Space Grotesk to the English UI and **Manrope** to the Russian
+ * one — Space Grotesk carries no Cyrillic, so `globals.css` swaps `--font-sans`
+ * wholesale on `html[lang="ru"]`. This app is Russian, so Manrope is the face,
+ * and it is the same one the Russian deck uses.
+ *
+ * Until this existed the app rendered in Android's Roboto while every metric
+ * here was transcribed correctly from the web — which is why the screens could
+ * be numerically right and still look like a different product. Typeface is the
+ * first thing the eye reads.
+ *
+ * React Native does not synthesise weights from one family: asking for
+ * `fontWeight: '600'` on the regular face gives a faked bold that looks wrong.
+ * Each weight is therefore its own family name, resolved by `fontFor` below —
+ * never set `fontWeight` on its own.
+ */
+export const fonts = {
+  regular: 'Manrope_400Regular',
+  medium: 'Manrope_500Medium',
+  semibold: 'Manrope_600SemiBold',
+  bold: 'Manrope_700Bold',
+} as const
+
+export type FontWeight = '400' | '500' | '600' | '700'
+
+export function fontFor(weight: FontWeight = '400'): string {
+  switch (weight) {
+    case '700':
+      return fonts.bold
+    case '600':
+      return fonts.semibold
+    case '500':
+      return fonts.medium
+    default:
+      return fonts.regular
+  }
+}
+
 export const radius = { md: 16, lg: 22, pill: 999 } as const
 
 /** Font sizes named as the web names them. */
@@ -76,11 +116,15 @@ export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 } as const
 
 /** Exact numbers behind the web's component classes. */
 export const metrics = {
-  /** .auth-hero */
+  /** .auth-hero — max-width 320, margin auto, inside a vertically centred shell */
   authMaxWidth: 320,
-  /** .auth-title */
-  authTitleSize: 28,
-  authTitleSpacing: -0.6,
+  /**
+   * .auth-title — `clamp(26px, 7vw, 30px)` resolves to 26.25px at 375pt wide,
+   * with `line-height: 1.1` and `letter-spacing: -0.02em`. Centred.
+   */
+  authTitleSize: 26,
+  authTitleLineHeight: 29,
+  authTitleSpacing: -0.52,
   /** .auth-hint */
   authHintSize: 13.5,
   /** .auth-pill / .auth-pill-secondary */

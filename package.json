@@ -20,6 +20,7 @@
     "e2e:realtime": "esbuild scripts/e2e-realtime.ts --bundle --platform=node --format=cjs --external:ws --outfile=.tmp/e2e-realtime.cjs --log-level=warning && node .tmp/e2e-realtime.cjs"
   },
   "dependencies": {
+    "@expo-google-fonts/manrope": "^0.4.2",
     "@noble/hashes": "^2.2.0",
     "bip39": "^3.1.0",
     "buffer": "^6.0.3",
@@ -27,6 +28,7 @@
     "expo-asset": "~11.0.5",
     "expo-build-properties": "~0.13.3",
     "expo-constants": "~17.0.8",
+    "expo-font": "~13.0.4",
     "expo-linking": "~7.0.5",
     "expo-router": "~4.0.0",
     "expo-secure-store": "~14.0.0",

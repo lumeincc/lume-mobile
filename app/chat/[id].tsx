@@ -4,11 +4,19 @@
 import '../../src/polyfills'
 
 import { useRef, useState } from 'react'
-import { FlatList, KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View } from 'react-native'
+import { FlatList, KeyboardAvoidingView, Platform, Pressable, TextInput, View } from 'react-native'
 import { router, useLocalSearchParams } from 'expo-router'
 import { useSession } from '../../src/store/session'
-import { Avatar, ErrorText, IconButton, OnlineDot, Screen, usePalette } from '../../src/ui/components'
-import { metrics, radius, space, text } from '../../src/ui/theme'
+import {
+  Avatar,
+  ErrorText,
+  IconButton,
+  OnlineDot,
+  Screen,
+  Txt,
+  usePalette,
+} from '../../src/ui/components'
+import { fontFor, metrics, radius, space, text } from '../../src/ui/theme'
 import type { StoredMessage } from '../../src/vault'
 
 /**
@@ -66,12 +74,12 @@ export default function Chat() {
         <IconButton glyph="‹" onPress={() => router.back()} emphasis="primary" />
         <Avatar name={contact?.username ?? '?'} size={36} />
         <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 15, fontWeight: '600', color: p.textPrimary }}>
+          <Txt style={{ fontSize: 15, fontWeight: '600', color: p.textPrimary }}>
             {contact?.username ?? 'Неизвестный'}
-          </Text>
+          </Txt>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 1 }}>
             <OnlineDot online={session.connection === 'connected'} />
-            <Text style={{ fontSize: text.caption, color: p.textMuted }}>сквозное шифрование</Text>
+            <Txt style={{ fontSize: text.caption, color: p.textMuted }}>сквозное шифрование</Txt>
           </View>
         </View>
       </View>
@@ -90,9 +98,9 @@ export default function Chat() {
           windowSize={11}
           ListEmptyComponent={
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.xl }}>
-              <Text style={{ fontSize: 14, color: p.textMuted, textAlign: 'center', lineHeight: 21 }}>
+              <Txt style={{ fontSize: 14, color: p.textMuted, textAlign: 'center', lineHeight: 21 }}>
                 Сообщений пока нет. Первое установит защищённую сессию.
-              </Text>
+              </Txt>
             </View>
           }
           renderItem={({ item }) => <Bubble message={item} onRetry={() => session.retry(item.id)} />}
@@ -122,6 +130,7 @@ export default function Chat() {
                 paddingVertical: 10,
                 color: p.textPrimary,
                 fontSize: metrics.inputFontSize,
+                fontFamily: fontFor('400'),
                 lineHeight: 21,
               }}
             />
@@ -138,7 +147,7 @@ export default function Chat() {
                 opacity: pressed ? 0.8 : 1,
               })}
             >
-              <Text
+              <Txt
                 style={{
                   fontSize: 17,
                   fontWeight: '700',
@@ -146,7 +155,7 @@ export default function Chat() {
                 }}
               >
                 ↑
-              </Text>
+              </Txt>
             </Pressable>
           </View>
         </View>
@@ -180,10 +189,10 @@ function Bubble({ message, onRetry }: { message: StoredMessage; onRetry: () => v
           borderBottomRightRadius: mine ? metrics.bubbleTail : metrics.bubbleRadius,
         }}
       >
-        <Text style={{ color: mine ? p.accentContrast : p.textPrimary, fontSize: 15, lineHeight: 21 }}>
+        <Txt style={{ color: mine ? p.accentContrast : p.textPrimary, fontSize: 15, lineHeight: 21 }}>
           {message.text}
-        </Text>
-        <Text
+        </Txt>
+        <Txt
           style={{
             fontSize: text.caption,
             color: mine ? p.accentContrast : p.textMuted,
@@ -193,14 +202,14 @@ function Bubble({ message, onRetry }: { message: StoredMessage; onRetry: () => v
           }}
         >
           {`${String(new Date(message.timestamp).getHours()).padStart(2, '0')}:${String(new Date(message.timestamp).getMinutes()).padStart(2, '0')}`}
-        </Text>
+        </Txt>
       </View>
 
       {status === 'failed' ? (
         <Pressable onPress={onRetry} hitSlop={8} style={{ alignSelf: 'flex-end', paddingLeft: 8, paddingBottom: 4 }}>
-          <Text style={{ fontSize: text.caption, color: p.danger, fontWeight: '600' }}>
+          <Txt style={{ fontSize: text.caption, color: p.danger, fontWeight: '600' }}>
             не отправлено · повторить
-          </Text>
+          </Txt>
         </Pressable>
       ) : null}
     </View>
