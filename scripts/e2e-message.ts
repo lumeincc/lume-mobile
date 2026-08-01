@@ -19,7 +19,7 @@ import { webcrypto } from 'node:crypto'
 if (!globalThis.crypto) (globalThis as { crypto?: Crypto }).crypto = webcrypto as unknown as Crypto
 
 const PIN = '123456'
-const SECRET_TEXT = 'Привет! Это сообщение видно только нам двоим. 🔒'
+const SECRET_TEXT = 'Hello! Only the two of us can read this. 🔒'
 
 function randomName() {
   return `t_${Math.random().toString(36).slice(2, 10)}`
@@ -74,7 +74,7 @@ async function main() {
   const stored = msg.encryptedPayload
   console.log('WHAT THE RELAY STORED (this is all it ever sees):')
   console.log(`  ${stored.slice(0, 180)}${stored.length > 180 ? '…' : ''}`)
-  const leaks = stored.includes(SECRET_TEXT) || stored.includes('Привет')
+  const leaks = stored.includes(SECRET_TEXT) || stored.includes('Hello')
   console.log(`  contains the plaintext? ${leaks ? 'YES — LEAK!' : 'no'}\n`)
 
   // ── B decrypts ─────────────────────────────────────────────────────────────
@@ -92,7 +92,7 @@ async function main() {
   // ── A second message, to prove the ratchet keeps working ───────────────────
   setCurrentPlatform(platformA)
   await openSession(platformA, PIN)
-  const second = 'Второе сообщение — новый ключ на каждое.'
+  const second = 'A second message — a fresh key for every one.'
   const sent2 = await sendMessage(a.account.userId, { id: b.account.userId, username: nameB }, second)
   if (!sent2.ok) throw new Error(`send 2: ${sent2.error}`)
 
@@ -139,7 +139,7 @@ async function main() {
   if (!reopenedA.ok) throw new Error(`reopen A: ${reopenedA.reason}`)
   describeSession('A after restart', b.account.userId)
 
-  const afterRestart = 'Третье — уже после перезапуска обоих клиентов.'
+  const afterRestart = 'A third, after restarting both clients.'
   const sent3 = await sendMessage(a.account.userId, { id: b.account.userId, username: nameB }, afterRestart)
   if (!sent3.ok) throw new Error(`send 3: ${sent3.error}`)
 
