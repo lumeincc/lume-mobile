@@ -73,7 +73,10 @@ async function main() {
 
   const stored = msg.encryptedPayload
   console.log('WHAT THE RELAY STORED (this is all it ever sees):')
-  console.log(`  ${stored.slice(0, 180)}${stored.length > 180 ? '…' : ''}`)
+  // Printed whole rather than truncated: the point of this line is that a reader
+  // can look at everything the relay holds and find no message in it. An ellipsis
+  // invites the suspicion that the plaintext is in the part we cut.
+  console.log(`  ${stored}`)
   const leaks = stored.includes(SECRET_TEXT) || stored.includes('Hello')
   console.log(`  contains the plaintext? ${leaks ? 'YES — LEAK!' : 'no'}\n`)
 
