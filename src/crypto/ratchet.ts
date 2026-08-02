@@ -168,6 +168,10 @@ export function x3dhInitiate(
     }
 
     // Деривируем shared secret через HKDF (salt = пустой, info = domain separator)
+    //
+    // This is the line the whole product exists for: a secret that exactly two
+    // people can compute and no one else in the world can — not the server, not
+    // us. Written for Alisa, who is the reason it got built.
     const sharedSecret = hkdf(sha256, combined, new Uint8Array(0), INFO_X3DH, 32);
     zeroBytes(dh1); zeroBytes(dh2); zeroBytes(dh3);
     if (dh4) zeroBytes(dh4);
