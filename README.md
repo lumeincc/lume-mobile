@@ -70,6 +70,25 @@ npm run e2e:message     # two accounts, real messages, asserts the relay stored 
 npm run e2e:realtime    # a live socket, measures push latency end to end
 ```
 
+## CI
+
+Every push and pull request runs the same gates, so `npm run verify` is no
+longer something that only happens on one laptop:
+
+| Job | What it proves |
+|---|---|
+| Type-check | `tsc --noEmit` |
+| Tests | the 184-case suite |
+| Crypto — unchanged from the web client | the vendored crypto suites on their own, so drift in the copied core is its own red job rather than noise inside a larger run |
+| Full verify | tests + device simulation + its negative case + a real Expo export |
+| Secrets | gitleaks across the whole history, redacted |
+| Dependencies | `npm audit` — production tree fails at moderate, full tree at high |
+
+The dependency gate was deliberately left out when CI was first added: the tree
+carried 22 advisories under the Expo toolchain at the time, and a gate that is
+red on the day it lands is how gates get switched off. It was turned on once
+the tree was clean.
+
 ## Status
 
 **The engine is complete and proven on real hardware** — a Galaxy S24 (Android 16), against the live relay: account creation, registration, encrypted messaging (X3DH + Double Ratchet), real-time delivery, persistence across restarts, and silent identity rebind when the relay loses its user row.
