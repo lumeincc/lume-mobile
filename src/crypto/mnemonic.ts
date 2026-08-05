@@ -165,11 +165,23 @@ export function getRandomWordPositions(wordCount: number, checkCount: number = 3
     const available = Array.from({ length: wordCount }, (_, i) => i);
 
     for (let i = 0; i < Math.min(checkCount, wordCount); i++) {
+        if (available.length === 0) break;
+
         const randomBytes = new Uint32Array(1);
         crypto.getRandomValues(randomBytes);
-        const randomIndex = randomBytes[0]! % available.length;
-        positions.push(available[randomIndex]!);
-        available.splice(randomIndex, 1);
+        const randomValue = randomBytes[0];
+        if (randomValue === undefined) {
+            // Unreachable for a one-element Uint32Array, but falling back to a
+            // default here would silently bias which words the user is asked to
+            // confirm. Fail closed instead.
+            throw new Error('Mnemonic check: CSPRNG returned no value');
+        }
+
+        // splice returns what it removed, so the position is read and taken in
+        // one step — the previous version indexed, asserted, then spliced.
+        const [position] = available.splice(randomValue % available.length, 1);
+        if (position === undefined) break;
+        positions.push(position);
     }
 
     return positions.sort((a, b) => a - b);

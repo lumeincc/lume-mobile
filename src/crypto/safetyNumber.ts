@@ -8,10 +8,30 @@ import { decodeBase64 } from 'tweetnacl-util';
 // not drift; matches Signal's fingerprint hardening. SEC-20260721-028.
 const SAFETY_NUMBER_ITERATIONS = 5200;
 
+/**
+ * Byte at `index`, or a thrown error.
+ *
+ * Fails closed on purpose. Substituting a default for a missing byte would let a
+ * short digest produce a *weaker* safety number — one that two different
+ * identities could share — which is the single thing this file must never do.
+ * A safety number that is wrong is worse than one that fails to render.
+ */
+function byteAt(bytes: Uint8Array, index: number): number {
+  const value = bytes[index];
+  if (value === undefined) {
+    throw new Error(`Safety number: no byte at index ${index} of ${bytes.length}`);
+  }
+  return value;
+}
+
 function compareBytes(a: Uint8Array, b: Uint8Array): number {
   const len = Math.min(a.length, b.length);
   for (let i = 0; i < len; i++) {
-    if (a[i] !== b[i]) return a[i]! < b[i]! ? -1 : 1;
+    // Read once each: the previous version indexed both arrays twice per
+    // differing byte, and asserted non-undefined on the second read.
+    const av = byteAt(a, i);
+    const bv = byteAt(b, i);
+    if (av !== bv) return av < bv ? -1 : 1;
   }
   return a.length === b.length ? 0 : a.length < b.length ? -1 : 1;
 }
@@ -63,9 +83,9 @@ export function computeSafetyNumber(params: {
   // 10 groups of 5 digits (50-digit "safety number"), 3 bytes each (30 bytes).
   const groups: string[] = [];
   for (let i = 0; i < 10; i++) {
-    const b0 = digest[i * 3]!;
-    const b1 = digest[i * 3 + 1]!;
-    const b2 = digest[i * 3 + 2]!;
+    const b0 = byteAt(digest, i * 3);
+    const b1 = byteAt(digest, i * 3 + 1);
+    const b2 = byteAt(digest, i * 3 + 2);
     const value = ((b0 << 16) | (b1 << 8) | b2) % 100000;
     groups.push(value.toString().padStart(5, '0'));
   }

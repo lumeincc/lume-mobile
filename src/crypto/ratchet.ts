@@ -340,11 +340,11 @@ function skipMessageKeys(session: DoubleRatchetSession, until: number): void {
 
     // Evict oldest skipped keys if over capacity
     if (session.skippedMessageKeys.size > MAX_SKIPPED_KEYS) {
-        const allKeys = Array.from(session.skippedMessageKeys.keys());
-        let i = 0;
-        while (session.skippedMessageKeys.size > MAX_SKIPPED_KEYS && i < allKeys.length) {
-            session.skippedMessageKeys.delete(allKeys[i]!);
-            i++;
+        // Map iteration is insertion-ordered, so this drops oldest first. Taking
+        // the keys as a snapshot first keeps deletion from mutating the iterator.
+        for (const key of Array.from(session.skippedMessageKeys.keys())) {
+            if (session.skippedMessageKeys.size <= MAX_SKIPPED_KEYS) break;
+            session.skippedMessageKeys.delete(key);
         }
     }
 }
