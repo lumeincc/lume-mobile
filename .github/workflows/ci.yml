@@ -106,10 +106,34 @@ jobs:
         # publish the very thing the job exists to catch.
         run: gitleaks git --redact --no-banner --log-opts="--all" .
 
-# Deliberately absent: a dependency advisory gate.
-#
-# `npm audit` reports 22 advisories here, all transitive under the Expo
-# toolchain (@expo/metro-config, @expo/config-plugins, cacache, postcss).
-# Adding a gate that is red on the day it lands is how gates get switched off,
-# so it is not being added until the tree is clean — that is tracked work, not
-# a standing exemption. The web repositories, which are clean, do gate on it.
+  dep-audit:
+    name: Dependencies — Advisory audit
+    runs-on: ubuntu-latest
+    # This job was deliberately left out when CI was first added: `npm audit`
+    # reported 22 advisories under the Expo toolchain, and a gate that is red on
+    # the day it lands is how gates get switched off. The tree is clean now —
+    # `postcss`, `tar` and `uuid` pinned through `overrides`, `@xmldom/xmldom`
+    # to ^0.9.8, `esbuild` and `vitest` bumped — so the gate can hold the line.
+    #
+    # Notably this was reached *without* the Expo 52 → 57 jump npm suggested.
+    # That is five majors and a React Native upgrade underneath it, which is a
+    # planned migration, not an audit fix.
+    #
+    # Two thresholds, matching the web repositories: the production tree fails
+    # at moderate, the full tree including build and test tooling at high.
+    strategy:
+      fail-fast: false
+      matrix:
+        tree: [production, full]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Production tree (moderate+ fails)
+        if: matrix.tree == 'production'
+        run: npm audit --omit=dev --audit-level=moderate
+      - name: Full tree incl. dev tooling (high+ fails)
+        if: matrix.tree == 'full'
+        run: npm audit --audit-level=high
