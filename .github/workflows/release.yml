@@ -37,8 +37,18 @@ jobs:
       - name: Verify
         run: npm run verify
 
+      # `expo prebuild` printed "Failed to create the native directory" and
+      # still exited 0, so the first tagged release marched on and died two
+      # steps later on `cd android` with a message about a missing folder. The
+      # check makes the failure land where it happened.
       - name: Prebuild
-        run: npx expo prebuild -p android --no-install
+        run: |
+          set -euo pipefail
+          npx expo prebuild -p android --no-install
+          test -f android/gradlew || {
+            echo "::error::prebuild did not produce android/gradlew"
+            exit 1
+          }
 
       # `assembleRelease`, not `assembleDebug`: expo-modules-core only declares
       # the release variant, so debug fails at configuration.

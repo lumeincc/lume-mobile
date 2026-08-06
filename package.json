@@ -10,6 +10,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "test": "vitest run",
+    "audit:gate": "node scripts/audit-gate.mjs",
     "test:watch": "vitest",
     "sim:build": "esbuild scripts/device-sim.ts --bundle --platform=node --format=esm --main-fields=react-native,browser,module,main --conditions=react-native,browser,import --outfile=.tmp/device-sim.mjs --log-level=warning",
     "sim": "npm run sim:build && node .tmp/device-sim.mjs",
@@ -57,7 +58,6 @@
     "@xmldom/xmldom": "^0.9.8",
     "esbuild": "$esbuild",
     "postcss": "^8.5.23",
-    "tar": "^7.5.21",
     "uuid": "^11.1.1"
   }
 }

@@ -109,31 +109,23 @@ jobs:
   dep-audit:
     name: Dependencies — Advisory audit
     runs-on: ubuntu-latest
-    # This job was deliberately left out when CI was first added: `npm audit`
-    # reported 22 advisories under the Expo toolchain, and a gate that is red on
-    # the day it lands is how gates get switched off. The tree is clean now —
-    # `postcss`, `tar` and `uuid` pinned through `overrides`, `@xmldom/xmldom`
-    # to ^0.9.8, `esbuild` and `vitest` bumped — so the gate can hold the line.
-    #
-    # Notably this was reached *without* the Expo 52 → 57 jump npm suggested.
-    # That is five majors and a React Native upgrade underneath it, which is a
-    # planned migration, not an audit fix.
-    #
-    # Two thresholds, matching the web repositories: the production tree fails
-    # at moderate, the full tree including build and test tooling at high.
-    strategy:
-      fail-fast: false
-      matrix:
-        tree: [production, full]
+    # Most of the Expo toolchain advisories were closed with `overrides`
+    # (`@xmldom/xmldom`, `postcss`, `uuid`) plus direct bumps to `esbuild` and
+    # `vitest`. What remains is the `tar` cluster under @expo/cli, which is
+    # allowlisted with its reasoning — see audit-allowlist.json.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: npm
-      - name: Production tree (moderate+ fails)
-        if: matrix.tree == 'production'
-        run: npm audit --omit=dev --audit-level=moderate
-      - name: Full tree incl. dev tooling (high+ fails)
-        if: matrix.tree == 'full'
-        run: npm audit --audit-level=high
+      # Not a bare `npm audit`: it has no allowlist, so it can only fail on
+      # everything or gate on nothing. The gate below fails on anything not
+      # written down in audit-allowlist.json with a reason, which keeps new
+      # advisories loud while letting a judged one stay judged.
+      #
+      # This exists because the alternative was tried. Forcing `tar` to 7
+      # through overrides made `npm audit` report zero — and broke `expo
+      # prebuild`, so the app could not be built at all. A green number is not
+      # the goal.
+      - run: node scripts/audit-gate.mjs
