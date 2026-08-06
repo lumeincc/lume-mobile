@@ -223,6 +223,20 @@ export default function Index() {
                 />
               )}
             </View>
+
+            {/*
+              Build identity. On a phone there is no URL to read and no deploy
+              log within reach, so an APK sideloaded last week is
+              indistinguishable from one sideloaded this morning unless the build
+              says so itself. Selectable, because the point of showing a commit
+              is that it can be copied into a bug report.
+            */}
+            <Txt
+              selectable
+              style={{ marginTop: space.lg, textAlign: 'center', fontSize: 11, color: p.textMuted }}
+            >
+              {BUILD_LABEL}
+            </Txt>
           </AuthHero>
         </ScrollView>
       </KeyboardAvoidingView>

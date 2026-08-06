@@ -1,0 +1,100 @@
+name: Release
+
+# Tag-driven, not push-driven. A release should be a thing someone decided to
+# make, and a tag is that decision written down; building one on every push to
+# main produces a pile of artefacts nobody chose and nobody can tell apart.
+#
+#   git tag v0.1.1 && git push origin v0.1.1
+on:
+  push:
+    tags: ["v*"]
+  # Manual runs produce an unsigned build for testing the workflow itself
+  # without spending a version number on it.
+  workflow_dispatch:
+
+permissions:
+  contents: write # required to create the release and upload to it
+
+jobs:
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - run: npm ci
+
+      # The same gate that guards every push. A release must not be the one
+      # build that skipped the tests.
+      - name: Verify
+        run: npm run verify
+
+      - name: Prebuild
+        run: npx expo prebuild -p android --no-install
+
+      # `assembleRelease`, not `assembleDebug`: expo-modules-core only declares
+      # the release variant, so debug fails at configuration.
+      #
+      # No signing configuration is supplied here, so Gradle produces an
+      # *unsigned* APK. That is deliberate. A release keystore and its passwords
+      # are the credentials that let anyone publish an update as LUME, and they
+      # are the owner's to hold — wiring them into CI is a decision with real
+      # consequences, not a step to slip into a workflow file. Sign locally, or
+      # add the keystore as repository secrets once that trade-off has been
+      # thought about properly.
+      - name: Build
+        env:
+          EXPO_PUBLIC_BUILD_COMMIT: ${{ github.sha }}
+        run: cd android && ./gradlew :app:assembleRelease --no-daemon
+
+      - name: Name the artefact after what it is
+        id: artefact
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./app.json').expo.version")
+          short=$(git rev-parse --short HEAD)
+          name="lume-${version}-${short}-unsigned.apk"
+          src=$(find android/app/build/outputs/apk/release -name '*.apk' | head -n 1)
+          cp "$src" "$name"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          # The checksum is what makes an APK downloaded from a release page
+          # verifiable against the one CI produced.
+          sha256sum "$name" | tee "${name}.sha256"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: android-apk
+          path: |
+            ${{ steps.artefact.outputs.name }}
+            ${{ steps.artefact.outputs.name }}.sha256
+
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        with:
+          draft: true # a human decides when it goes public
+          generate_release_notes: true
+          body: |
+            **This APK is unsigned.** Android will refuse to install it until it
+            is signed — see the workflow for why the keystore is not held here.
+
+            Verify what you downloaded against the checksum published beside it:
+
+            ```
+            sha256sum -c ${{ steps.artefact.outputs.name }}.sha256
+            ```
+
+            Built from `${{ github.sha }}`. The same commit is shown at the
+            bottom of the app's first screen, so a device can be matched to a
+            build without guessing.
+          files: |
+            ${{ steps.artefact.outputs.name }}
+            ${{ steps.artefact.outputs.name }}.sha256
