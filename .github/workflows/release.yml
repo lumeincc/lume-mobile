@@ -91,6 +91,14 @@ jobs:
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
           draft: true # a human decides when it goes public
+          # Refuse silently-empty releases. v0.1.0 went out with no APK on it:
+          # the tag had been deleted and re-created after a failed first build,
+          # and the release that ended up published was not the one the
+          # successful run had attached files to. Nothing failed — the workflow
+          # reported success and the release page simply had nothing on it,
+          # which for a release whose entire purpose is the APK is worse than a
+          # red run.
+          fail_on_unmatched_files: true
           generate_release_notes: true
           body: |
             **This APK is unsigned.** Android will refuse to install it until it
