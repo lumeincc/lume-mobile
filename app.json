@@ -31,7 +31,8 @@
             "node_modules/@expo-google-fonts/manrope/700Bold/Manrope_700Bold.ttf"
           ]
         }
-      ]
+      ],
+      "./plugins/with-release-signing"
     ],
     "android": {
       "package": "app.lume.mobile",
