@@ -13,6 +13,51 @@
   ],
   "allowed": [
     {
+      "package": "metro",
+      "advisories": ["*"],
+      "severity": "high",
+      "reason": "Flagged only because it depends on the image-size above. Metro is the bundler; it runs on this machine and in CI, never on a device.",
+      "whyNotFixed": "Resolves when image-size does.",
+      "realFix": "Expo 52 -> 57.",
+      "addedOn": "2026-08-11"
+    },
+    {
+      "package": "metro-config",
+      "advisories": ["*"],
+      "severity": "high",
+      "reason": "Same chain as metro above.",
+      "whyNotFixed": "Resolves when image-size does.",
+      "realFix": "Expo 52 -> 57.",
+      "addedOn": "2026-08-11"
+    },
+    {
+      "package": "metro-transform-worker",
+      "advisories": ["*"],
+      "severity": "high",
+      "reason": "Same chain as metro above.",
+      "whyNotFixed": "Resolves when image-size does.",
+      "realFix": "Expo 52 -> 57.",
+      "addedOn": "2026-08-11"
+    },
+    {
+      "package": "@react-native/community-cli-plugin",
+      "advisories": ["*"],
+      "severity": "high",
+      "reason": "Flagged only because it pulls metro, and so image-size. A build-time CLI plugin, not shipped in the app.",
+      "whyNotFixed": "Resolves when image-size does.",
+      "realFix": "Expo 52 -> 57.",
+      "addedOn": "2026-08-11"
+    },
+    {
+      "package": "react-native",
+      "advisories": ["*"],
+      "severity": "high",
+      "reason": "Flagged only as the root of the metro chain above — the advisory is in image-size, not in React Native itself. Worth re-reading rather than assuming next time this appears: an entry on react-native is broad, and a real advisory against React Native proper would be hidden by it.",
+      "whyNotFixed": "Resolves when image-size does.",
+      "realFix": "Expo 52 -> 57, which moves React Native too.",
+      "addedOn": "2026-08-11"
+    },
+    {
       "package": "image-size",
       "advisories": ["GHSA-w3rx-r6r6-pgpr", "GHSA-5p2g-fcmc-qvqq"],
       "severity": "high",
