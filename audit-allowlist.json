@@ -13,6 +13,15 @@
   ],
   "allowed": [
     {
+      "package": "image-size",
+      "advisories": ["GHSA-w3rx-r6r6-pgpr", "GHSA-5p2g-fcmc-qvqq"],
+      "severity": "high",
+      "reason": "Reached only through metro, the bundler, on two paths: expo -> expo-file-system -> expo@57 -> @expo/metro, and react-native -> @react-native/community-cli-plugin -> metro. Metro reads image dimensions at bundle time from assets in this repository. It does not run on a device and never parses an image that came from a user or a network.",
+      "whyNotFixed": "Both advisories are denial of service through infinite loops in the ICNS, JXL and HEIF parsers, reachable only by feeding the parser a malformed image. The only images it is fed are our own, committed to the repository. `npm audit fix --force` resolves it by moving metro itself, which is a bundler change on a project whose native build has already been broken once by a dependency bump made to satisfy an audit.",
+      "realFix": "Expo 52 -> 57, the same migration that clears tar. Tracked separately.",
+      "addedOn": "2026-08-10"
+    },
+    {
       "package": "tar",
       "advisories": ["GHSA-34x7-hfp2-rc4v", "GHSA-8qq5-rm4j-mr97", "GHSA-83g3-92jg-28cx", "GHSA-qffp-2rhf-9h96", "GHSA-9ppj-qmqm-q256", "GHSA-r6q2-hw4h-h46w", "GHSA-vmf3-w455-68vh", "GHSA-w8wr-v893-vjvp", "GHSA-23hp-3jrh-7fpw", "GHSA-8x88-c5mf-7j5w", "GHSA-gvwx-54wh-qm9j", "GHSA-r292-9mhp-454m"],
       "severity": "critical",
