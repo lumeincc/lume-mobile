@@ -118,4 +118,4 @@ The relay URL and the app's declared origin come from `src/lib/config.ts` and ca
 
 ## Licence
 
-Source-available, **view-only** — the same terms as LUME. You may read and reference the source; running, copying, modifying or distributing it requires a separate written licence. This is **not** an open-source or free-software licence. See [LICENSE](LICENSE), and the full terms in the [main LUME repository](https://github.com/aaversee/lume).
+Source-available, **view-only** — the same terms as LUME. You may read and reference the source; running, copying, modifying or distributing it requires a separate written licence. This is **not** an open-source or free-software licence. See [LICENSE](LICENSE), and the full terms in the [main LUME repository](https://github.com/lumeincc/lume).
