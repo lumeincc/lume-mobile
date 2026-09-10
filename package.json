@@ -51,7 +51,7 @@
     "@types/ws": "^8.18.1",
     "esbuild": "^0.25.12",
     "typescript": "^5.5.0",
-    "vitest": "^4.1.10",
+    "vitest": "^4.1.11",
     "ws": "^8.21.1"
   },
   "overrides": {
@@ -59,7 +59,7 @@
     "esbuild": "$esbuild",
     "postcss": "^8.5.23",
     "uuid": "^11.1.1",
-    "js-yaml": "^4.1.1",
+    "js-yaml": "^4.3.2",
     "nanoid": "^3.3.18",
     "fast-uri": "^3.1.7"
   }
